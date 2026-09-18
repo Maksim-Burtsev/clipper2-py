@@ -154,9 +154,9 @@ HANG_TIMEOUT = 20  # seconds without ref_cli finishing a batch that normally tak
 
 
 def run_ref(records: list[str]) -> list[str]:
-    """One reply per record.  Upstream's Triangulate does not return on some inputs, and on
-    which ones depends on the platform (issue #2): such a record gets the reply HANG, found
-    from how far ref_cli's flushed output got before the timeout."""
+    """One reply per record.  Upstream's Triangulate does not return on some inputs (issue #2).
+    The generators avoid the known ones; should one slip through, its record gets the reply
+    HANG, found from how far ref_cli's flushed output got before the timeout."""
     replies: list[str] = []
     while len(replies) < len(records):
         with tempfile.TemporaryDirectory() as tmp:
