@@ -114,8 +114,8 @@ benchmarks/
    a text file, prints results (`%.17g` for doubles). A seeded pytest generates ≥10 000 random
    cases over boolean ops (all clip types × fill rules, open paths, polytree), offset (all join ×
    end types), rectclip, rectclip lines, minkowski, triangulation, simplify/RDP/trim_collinear,
-   64 and D, and demands exact equality with the binding's output. Built only when
-   `-DCLIPPER2_PY_BUILD_REF=ON`; the test skips if the binary is absent.
+   64 and D, and demands exact equality with the binding's output. Built by the standalone
+   `tests/reference/CMakeLists.txt` into `build/ref/ref_cli`; the test skips if the binary is absent.
 3. Binding-specific tests: dtype dispatch, every validation error, empty inputs, callbacks
    (including ones that raise), PolyTree lifetime (child outlives tree variable), GIL release
    (two threads run concurrently), no leaks over 10⁵ calls (`tracemalloc` / RSS bound),
