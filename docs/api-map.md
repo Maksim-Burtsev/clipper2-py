@@ -13,7 +13,6 @@ Conventions used below:
   numpy array; "paths" is a list of those. In `clipper2.z` the arrays are N×3.
 * A getter/setter pair is a property; a lone getter stays a method, except on `PolyPath`
   where spec decision 9 fixes the surface.
-* Symbols marked **later** belong to a binding file that is not written yet.
 
 ## clipper.version.h
 
@@ -138,10 +137,14 @@ upstream's, quirk included.
 | `Union(subjects, fillrule[, precision])` | `union(subjects, fillrule, precision=None)` |
 | `Difference` (2) | `difference(subjects, clips, fillrule, decimal_prec=None)` |
 | `Xor` (2) | `xor(subjects, clips, fillrule, decimal_prec=None)` |
-| `InflatePaths` (2) | **later** (`bind_offset.cpp`) |
+| `InflatePaths(Paths64, delta, jt, et, miter_limit, arc_tolerance)` | `inflate_paths(paths, delta, jt, et, miter_limit=2.0, precision=None, arc_tolerance=0.0)` |
+| `InflatePaths(PathsD, delta, jt, et, miter_limit, precision, arc_tolerance)` | same function; `precision` sits where the D overload declares it |
 | `TranslatePath` (template + 2 overloads) | `translate_path(path, dx, dy)` |
 | `TranslatePaths` (template + 2 overloads) | `translate_paths(paths, dx, dy)` |
-| `RectClip` (4), `RectClipLines` (4) | **later** (`bind_misc.cpp`) |
+| `RectClip(Rect64, Path64)`, `RectClip(Rect64, Paths64)` | `rect_clip(rect, path)` — a path or paths, by nesting depth |
+| `RectClip(RectD, PathD, precision)`, `RectClip(RectD, PathsD, precision)` | `rect_clip(rect, path, precision=None)` — the `RectD` overloads, chosen by the rect |
+| `RectClipLines(Rect64, Path64)`, `(Rect64, Paths64)` | `rect_clip_lines(rect, line)` |
+| `RectClipLines(RectD, PathD, precision)`, `(RectD, PathsD, precision)` | `rect_clip_lines(rect, line, precision=None)` |
 | `namespace details` (`PolyPathToPaths64/D`, `PolyPath64ContainsChildren`, `OutlinePolyPath*`, `MakePathGeneric`, `GetNext`, `GetPrior`) | not bound: upstream's internal namespace |
 | `operator<<(ostream&, PolyTree64/PolyTreeD)` | `str(tree)` — upstream's exact text |
 | `PolyTreeToPaths64` | `poly_tree_to_paths64(polytree)` |
@@ -162,37 +165,60 @@ upstream's, quirk included.
 | `RDP` | not bound: the recursive helper of `ramer_douglas_peucker` (mutable flags out-parameter) |
 | `RamerDouglasPeucker(Path)`, `(Paths)` | `ramer_douglas_peucker(path, epsilon)` — a path or paths, by nesting depth |
 
-## clipper.offset.h — **later** (`bind_offset.cpp`)
+## clipper.offset.h
 
-Already bound here, because all enums are registered once in `_clipper2`:
+The enums are registered once, in `_clipper2`, so they are bound with the other shared types.
 
 | C++ | Python |
 | --- | --- |
 | `JoinType` | `JoinType.SQUARE / BEVEL / ROUND / MITER` |
 | `EndType` | `EndType.POLYGON / JOINED / BUTT / SQUARE / ROUND` |
+| `DeltaCallback64` | any callable `(path, path_normals, curr_idx, prev_idx) -> float`; `path` is an int64 array, `path_normals` a float64 one |
+| `ClipperOffset` | `ClipperOffset(miter_limit=2.0, arc_tolerance=0.0, preserve_collinear=False, reverse_solution=False)` — 64 only, as upstream; module-local (its points depend on `USINGZ`) |
+| `ClipperOffset::Group` and the other private members (`ExecuteInternal`, `DoGroupOffset`, `DoBevel`, `DoSquare`, `DoMiter`, `DoRound`, `BuildNormals`, `OffsetPolygon`, `OffsetOpenJoined`, `OffsetOpenPath`, `OffsetPoint`, `CalcSolutionCapacity`, `CheckReverseOrientation`, `ZCB`, the data members) | not bound: private |
+| `ClipperOffset::ErrorCode` | `error_code` (read-only property) |
+| `ClipperOffset::AddPath`, `AddPaths` | `add_path(path, jt_, et_)`, `add_paths(paths, jt_, et_)` — upstream's parameter names, trailing underscore included |
+| `ClipperOffset::Clear` | `clear()` |
+| `ClipperOffset::Execute(delta, Paths64&)` | `execute(delta) -> paths` |
+| `ClipperOffset::Execute(delta, PolyTree64&)` | `execute_tree(delta) -> PolyTree64` |
+| `ClipperOffset::Execute(DeltaCallback64, Paths64&)` | `execute(callable) -> paths`; like upstream it sets the callback and offsets with delta 1.0, and the callback stays set |
+| `ClipperOffset::MiterLimit`, `ArcTolerance`, `PreserveCollinear`, `ReverseSolution` | `miter_limit`, `arc_tolerance`, `preserve_collinear`, `reverse_solution` properties |
+| `ClipperOffset::SetZCallback` (USINGZ) | `set_z_callback(callback)`, as on `Clipper64` |
+| `ClipperOffset::SetDeltaCallback` | `set_delta_callback(callback)`; `None` removes it |
 
-Left for the offset step: `DeltaCallback64`, `ClipperOffset` and all its members,
-`InflatePaths` (clipper.h).
-
-## clipper.rectclip.h — **later** (`bind_misc.cpp`)
-
-`Location`, `OutPt2`, `OutPt2List` are rectclip-internal. `RectClip64`, `RectClipLines64`
-and the `RectClip` / `RectClipLines` free functions of clipper.h are left for that step.
-
-## clipper.minkowski.h — **later** (`bind_misc.cpp`)
-
-`namespace detail` (`Minkowski`, `Union`) is internal. `MinkowskiSum` (2) and
-`MinkowskiDiff` (2) are left for that step.
-
-## clipper.triangulation.h — **later** (`bind_misc.cpp`)
-
-Already bound here (enums are registered once in `_clipper2`):
+## clipper.rectclip.h
 
 | C++ | Python |
 | --- | --- |
-| `TriangulateResult` | `TriangulateResult.SUCCESS / FAIL / NO_POLYGONS / PATHS_INTERSECT` |
+| `Location`, `OutPt2`, `OutPt2List` | not bound: rectclip-internal types |
+| `RectClip64` | `RectClip64(rect)` — module-local (it holds `Point64`s) |
+| `RectClip64::Execute` | `execute(paths)` |
+| `RectClip64` private / protected members (`ExecuteInternal`, `GetPath`, `CheckEdges`, `TidyEdges`, `GetNextLocation`, `Add`, `AddCorner`, the data members) | not bound: internal |
+| `RectClipLines64` | `RectClipLines64(rect)`, a subclass of `RectClip64` as upstream |
+| `RectClipLines64::Execute` | `execute(paths)` |
+| `RectClipLines64::ExecuteInternal`, `GetPath` | not bound: private |
 
-`Triangulate` (2 overloads) is left for that step.
+The `RectClip` / `RectClipLines` free functions are in the clipper.h table above. They pick
+the family from the rect: a `Rect64` with float paths, or a `RectD` with integer ones, is a
+`TypeError`, because neither combination compiles in C++. `precision` is upstream's, so it
+defaults to 2 for a `RectD` and is refused for a `Rect64`.
+
+## clipper.minkowski.h
+
+| C++ | Python |
+| --- | --- |
+| `namespace detail` (`Minkowski`, `Union`) | not bound: upstream's internal namespace |
+| `MinkowskiSum(Path64, Path64, isClosed)` | `minkowski_sum(pattern, path, is_closed, decimal_places=None)` |
+| `MinkowskiSum(PathD, PathD, isClosed, decimalPlaces)` | same function; `decimal_places` defaults to upstream's 2 for the D family |
+| `MinkowskiDiff` (both overloads) | `minkowski_diff(pattern, path, is_closed, decimal_places=None)` |
+
+## clipper.triangulation.h
+
+| C++ | Python |
+| --- | --- |
+| `TriangulateResult` | `TriangulateResult.SUCCESS / FAIL / NO_POLYGONS / PATHS_INTERSECT` (registered once, in `_clipper2`) |
+| `Triangulate(Paths64, Paths64& solution, useDelaunay)` | `triangulate(pp, dec_places=None, use_delaunay=True) -> (TriangulateResult, paths)` |
+| `Triangulate(PathsD, decPlaces, PathsD& solution, useDelaunay)` | same function; `dec_places` sits where upstream declares it and, like upstream, has no default: the D family requires it |
 
 ## clipper.export.h
 

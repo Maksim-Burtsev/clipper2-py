@@ -676,7 +676,8 @@ def cases_triangulate(rng, per_combo=150) -> list[Case]:
                 prefix = "" if family == "64" else f"{decimals} "
                 record = (f"triangulate{family} {prefix}{int(use_delaunay)} "
                           f"{enc_paths(paths)}")
-                kw = {} if family == "64" else {"decimal_places": decimals}
+                # upstream calls it decPlaces here and decimalPlaces in minkowski
+                kw = {} if family == "64" else {"dec_places": decimals}
 
                 def call(paths=paths, dtype=dtype, use_delaunay=use_delaunay, kw=kw):
                     result, solution = clipper2.triangulate(

@@ -274,7 +274,7 @@ def test_trim_collinear():
     path = [(0, 0), (5, 0), (10, 0), (10, 10), (0, 10)]
     assert clipper2.trim_collinear(path).tolist() == [[0, 0], [10, 0], [10, 10], [0, 10]]
     assert len(clipper2.trim_collinear([(0, 0), (5, 0), (10, 0)], is_open_path=True)) == 2
-    assert clipper2.trim_collinear([(0.0, 0.0), (5.0, 0.0), (10.0, 0.0), (10.0, 10.0)], 2).shape[1] == 2
+    assert clipper2.trim_collinear([(0.0, 0.0), (5.0, 0.0), (10.0, 0.0), (10.0, 10.0)], precision=2).shape[1] == 2
 
 
 def test_simplify_and_rdp():

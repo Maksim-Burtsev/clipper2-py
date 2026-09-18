@@ -36,24 +36,6 @@ void add_clipper_base(const py::module_& m, py::class_<C>& c) {
 #endif
 }
 
-#ifdef USINGZ
-// Upstream's callback writes pt.z by reference; in Python the callback returns it.
-template <class T, class Callback, class Setter>
-void set_z_callback(const py::object& fn, Setter&& setter) {
-  if (fn.is_none()) {
-    setter(Callback(nullptr));
-    return;
-  }
-  setter(Callback([fn](const cl::Point<T>& e1bot, const cl::Point<T>& e1top,
-                       const cl::Point<T>& e2bot, const cl::Point<T>& e2top, cl::Point<T>& pt) {
-    py::gil_scoped_acquire gil;
-    py::object z = fn(from_point(e1bot), from_point(e1top), from_point(e2bot), from_point(e2top),
-                      from_point(pt));
-    pt.z = to_int64(z);
-  }));
-}
-#endif
-
 template <class P>
 py::class_<P> bind_polypath(py::module_& m, const char* name) {
   py::class_<P> c(m, name, py::module_local());

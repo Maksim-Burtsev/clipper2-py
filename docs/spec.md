@@ -47,8 +47,10 @@ answer, stop and report it to the orchestrator — do not pick.
    `ClipperOffset.execute(delta) -> paths`, `execute_tree(delta) -> PolyTree64`;
    `execute(delta)` also accepts a callable (upstream's `DeltaCallback64`:
    `(path, path_normals, curr_idx, prev_idx) -> float`).
-   `triangulate(paths, use_delaunay=True) -> (TriangulateResult, paths)`; D variant takes
-   `decimal_places` as upstream does. Free `boolean_op` with a polytree out-param →
+   `triangulate(pp, *, dec_places=None, use_delaunay=True) -> (TriangulateResult, paths)`
+   (`dec_places` is upstream's name; required for D, as upstream has no default). Where a D
+   overload inserts its precision parameter mid-list (`inflate_paths`, `trim_collinear`,
+   `triangulate`), it and everything after it are keyword-only. Free `boolean_op` with a polytree out-param →
    `boolean_op_tree`.
 8. `operator<<` overloads → `__str__` producing upstream's exact text; `__repr__` is a short
    Python-style repr.

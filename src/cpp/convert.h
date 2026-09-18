@@ -261,6 +261,25 @@ py::object from_geometry(const cl::Paths<T>& paths) {
   return from_paths(paths);
 }
 
+#ifdef USINGZ
+// Upstream's callback writes pt.z by reference; in Python the callback returns it.
+// Shared by Clipper64 / ClipperD (bind_engine.cpp) and ClipperOffset (bind_offset.cpp).
+template <class T, class Callback, class Setter>
+void set_z_callback(const py::object& fn, Setter&& setter) {
+  if (fn.is_none()) {
+    setter(Callback(nullptr));
+    return;
+  }
+  setter(Callback([fn](const cl::Point<T>& e1bot, const cl::Point<T>& e1top,
+                       const cl::Point<T>& e2bot, const cl::Point<T>& e2top, cl::Point<T>& pt) {
+    py::gil_scoped_acquire gil;
+    py::object z = fn(from_point(e1bot), from_point(e1top), from_point(e2bot), from_point(e2top),
+                      from_point(pt));
+    pt.z = to_int64(z);
+  }));
+}
+#endif
+
 // --- dispatch -------------------------------------------------------------------------
 
 // Runs f64() or fd() depending on the family of the geometry arguments (spec decision 4).
@@ -304,6 +323,7 @@ inline void reject_precision(const py::object& precision, const char* name, cons
 
 inline int precision_arg(const py::object& precision, int fallback) {
   if (precision.is_none()) return fallback;
+  if (py::isinstance<py::bool_>(precision)) throw py::type_error("precision must be an int, got bool");
   const int64_t value = to_int64(precision);  // a float is a TypeError, as in C++
   if (value < (std::numeric_limits<int>::min)() || value > (std::numeric_limits<int>::max)())
     raise_overflow("precision does not fit in an int");

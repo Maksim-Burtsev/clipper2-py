@@ -18,7 +18,9 @@ Class names keep their CamelCase, enum members are UPPER_SNAKE (`FillRule.NON_ZE
 Keyword-argument names are upstream's parameter names, snake_cased. Upstream is not always
 consistent, and neither are we: `boolean_op(..., precision=...)` but
 `intersect(..., decimal_prec=...)`, `Clipper64.execute(clip_type=..., fill_rule=...)` but
-`boolean_op(cliptype=..., fillrule=...)`.
+`boolean_op(cliptype=..., fillrule=...)`, `minkowski_sum(..., decimal_places=...)` but
+`triangulate(..., dec_places=...)`, and `ClipperOffset.add_path(path, jt_, et_)` with the
+trailing underscores upstream's parameters carry.
 
 ## 2. Points, paths and the two families
 
@@ -34,10 +36,15 @@ function (C++ converts `int` to `double` implicitly); a float array is refused b
 function.
 
 C++ picks between `Area(Path)` and `Area(Paths)` by static type. Python has only the shape
-of the argument, so `area`, `get_bounds`, `ramer_douglas_peucker`, `strip_near_equal` and
-`strip_duplicates` choose by nesting depth: a sequence of points is a path, a sequence of
-those is paths. An empty sequence cannot be a point, so it is an empty path: `[[]]` is paths
-holding one empty path, and a bare `[]` is an empty path.
+of the argument, so `area`, `get_bounds`, `ramer_douglas_peucker`, `strip_near_equal`,
+`strip_duplicates`, `rect_clip` and `rect_clip_lines` choose by nesting depth: a sequence of
+points is a path, a sequence of those is paths. An empty sequence cannot be a point, so it is
+an empty path: `[[]]` is paths holding one empty path, and a bare `[]` is an empty path.
+
+`rect_clip` and `rect_clip_lines` take the family from the rect as well, because that is what
+picks the overload in C++: a `Rect64` with float paths, or a `RectD` with integer ones, is a
+`TypeError`. `ClipperOffset` and the `RectClip64` / `RectClipLines64` classes are 64-only
+upstream, so float input is a `TypeError` there too.
 
 ## 3. Validation the C++ compiler does for free
 
@@ -56,6 +63,10 @@ holding one empty path, and a bare `[]` is an empty path.
 * `Clipper64.execute(clip_type, fill_rule)` returns `(closed_paths, open_paths)`;
   `execute_tree` returns `(tree, open_paths)`. Same for `ClipperD`.
 * The `BooleanOp` overload that fills a `PolyTree` is `boolean_op_tree`.
+* `ClipperOffset.execute(delta)` returns the paths and `execute_tree(delta)` the tree. The
+  `Execute` overload that takes a `DeltaCallback64` is `execute(callable)`: as upstream, it
+  offsets with a delta of 1.0 and leaves the callback set on the object afterwards.
+* `triangulate(...)` returns `(TriangulateResult, paths)`.
 * `strip_duplicates(path, is_closed_path)` returns the stripped path; C++ edits its
   argument in place.
 * Upstream's `Execute` returning `false` (an internal inconsistency it reports through the
@@ -65,8 +76,18 @@ holding one empty path, and a bare `[]` is an empty path.
 ## 5. `precision` / `decimal_prec`
 
 Only the D family has these parameters upstream, so they default to `None`: passing one to
-a 64-family call is a `TypeError`. `trim_collinear` is the one function whose D overload has
-no default upstream, so it requires `precision` for float input.
+a 64-family call is a `TypeError`. `trim_collinear` (`precision`) and `triangulate`
+(`dec_places`) are the two whose D overload has no default upstream, so they require the
+argument for float input.
+
+In three functions upstream's D overload inserts this parameter in the middle of the list:
+`InflatePaths(…, miter_limit, precision, arc_tolerance)`, `TrimCollinear(path, precision,
+is_open_path)`, `Triangulate(pp, decPlaces, solution, useDelaunay)`. One Python function
+serves both families, so a call written by position would change meaning with the input's
+dtype. There the parameter and everything after it are keyword-only:
+`inflate_paths(paths, delta, jt, et, miter_limit=2.0, *, precision=None, arc_tolerance=0.0)`,
+`trim_collinear(path, *, precision=None, is_open_path=False)`,
+`triangulate(pp, *, dec_places=None, use_delaunay=True)`.
 
 ## 6. Errors
 
@@ -97,10 +118,14 @@ module's instance (`clipper2.Clipper64.clear(z_clipper)`) is not guarded.
 ## 8. Callbacks and the GIL
 
 The GIL is released while upstream code runs and re-acquired for callbacks, so two threads
-clip in parallel. An exception raised inside a callback propagates out of `execute()`. It
-unwinds through upstream's C++, which skips the cleanup `Execute` does at the end: memory
-is still released (by the object's destructor), but call `clear()` before using that
-`Clipper64` / `ClipperD` again.
+clip in parallel. An exception raised inside a callback — a z callback, or `ClipperOffset`'s
+delta callback — propagates out of `execute()`. It unwinds through upstream's C++, which
+skips the cleanup `Execute` does at the end: memory is still released (by the object's
+destructor), but call `clear()` before using that `Clipper64` / `ClipperD` again.
+
+`ClipperOffset`'s delta callback is upstream's `DeltaCallback64`:
+`fn(path, path_normals, curr_idx, prev_idx)` returns the delta to use, with `path` as an
+int64 array and `path_normals` as a float64 one.
 
 ## 9. What is not bound
 

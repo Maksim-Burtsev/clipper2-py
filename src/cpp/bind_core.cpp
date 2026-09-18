@@ -577,7 +577,8 @@ void bind_core(py::module_& m) {
                   without_gil([&] { return cl::TrimCollinear(p, prec, is_open_path); }));
             });
       },
-      py::arg("path"), py::arg("precision") = py::none(), py::arg("is_open_path") = false);
+      py::arg("path"), py::kw_only(), py::arg("precision") = py::none(),
+      py::arg("is_open_path") = false);
 
   m.def(
       "distance",
