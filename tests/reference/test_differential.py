@@ -20,6 +20,7 @@ import os
 import struct
 import subprocess
 import tempfile
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -148,19 +149,37 @@ class Reply:
         return self.i == len(self.toks)
 
 
+HANG = "HANG"
+HANG_TIMEOUT = 20  # seconds without ref_cli finishing a batch that normally takes well under one
+
+
 def run_ref(records: list[str]) -> list[str]:
-    with tempfile.TemporaryDirectory() as tmp:
-        infile = Path(tmp) / "cases.txt"
-        infile.write_text("\n".join(records) + "\n")
-        proc = subprocess.run(
-            [str(REF_CLI), str(infile)], capture_output=True, text=True, check=False
+    """One reply per record.  Upstream's Triangulate does not return on some inputs, and on
+    which ones depends on the platform (issue #2): such a record gets the reply HANG, found
+    from how far ref_cli's flushed output got before the timeout."""
+    replies: list[str] = []
+    while len(replies) < len(records):
+        with tempfile.TemporaryDirectory() as tmp:
+            infile = Path(tmp) / "cases.txt"
+            infile.write_text("\n".join(records[len(replies):]) + "\n")
+            try:
+                proc = subprocess.run(
+                    [str(REF_CLI), str(infile)], capture_output=True, text=True, check=False,
+                    timeout=HANG_TIMEOUT,
+                )
+            except subprocess.TimeoutExpired as exc:
+                out = exc.stdout or b""
+                done = (out.decode() if isinstance(out, bytes) else out).splitlines(keepends=True)
+                replies += [r.rstrip("\n") for r in done if r.endswith("\n")]
+                replies.append(HANG)
+                continue
+        assert proc.returncode == 0, f"ref_cli exited {proc.returncode}: {proc.stderr}"
+        got = proc.stdout.splitlines()
+        assert len(replies) + len(got) == len(records), (
+            f"ref_cli replied {len(replies) + len(got)} times to {len(records)} records "
+            f"(it probably crashed on record {len(replies) + len(got)})"
         )
-    assert proc.returncode == 0, f"ref_cli exited {proc.returncode}: {proc.stderr}"
-    replies = proc.stdout.splitlines()
-    assert len(replies) == len(records), (
-        f"ref_cli replied {len(replies)} times to {len(records)} records "
-        f"(it probably crashed on record {len(replies)}: {records[len(replies)][:200]})"
-    )
+        replies += got
     return replies
 
 
@@ -234,7 +253,14 @@ class Case:
 def check(cases: list[Case]) -> None:
     replies = run_ref([c.record for c in cases])
     failures = []
+    hangs = replies.count(HANG)
+    if hangs:
+        # The binding would hang the same way, in process: these cases cannot be compared.
+        warnings.warn(f"upstream did not return on {hangs} of {len(cases)} cases (issue #2)")
+    assert hangs <= len(cases) // 10, f"upstream hangs on {hangs} of {len(cases)} cases"
     for case, reply in zip(cases, replies):
+        if reply == HANG:
+            continue
         error = None
         try:
             got = case.call()

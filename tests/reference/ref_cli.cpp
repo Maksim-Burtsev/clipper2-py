@@ -454,7 +454,7 @@ int main(int argc, char* argv[])
     {
       out << "EXCEPTION " << e.what() << '\n';
     }
+    out.flush();  // a reader that times out still learns which record did not return
   }
-  out.flush();
   return 0;
 }
