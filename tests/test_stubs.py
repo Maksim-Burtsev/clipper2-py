@@ -266,6 +266,7 @@ def test_method_signatures_match(module_and_stub: tuple[types.ModuleType, ast.Mo
             )
 
 
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="the sample uses typing.assert_type")
 def test_mypy_strict_on_the_sample() -> None:
     pytest.importorskip("mypy")
     sample = Path(__file__).with_name("typing_sample.py")
