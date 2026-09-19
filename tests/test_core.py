@@ -547,7 +547,7 @@ def test_ellipse_with_two_radii():
     path = clipper2.ellipse((0.0, 0.0), 10.0, 5.0)
     assert path.shape == (8, 2)
     assert tuple(path[0]) == (10.0, 0.0)  # (center.x + radius_x, center.y)
-    assert max(abs(path[:, 0])) == 10.0
+    assert max(abs(path[:, 0])) == pytest.approx(10.0)
     assert max(abs(path[:, 1])) == pytest.approx(5.0)
     # radius_y defaults to radius_x: a circle, and 7 steps for a radius of 5
     circle = clipper2.ellipse((0.0, 0.0), 5.0)

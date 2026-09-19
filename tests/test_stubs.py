@@ -270,7 +270,11 @@ def test_mypy_strict_on_the_sample() -> None:
     pytest.importorskip("mypy")
     sample = Path(__file__).with_name("typing_sample.py")
     # The directory that holds the clipper2 package, editable checkout or site-packages.
-    env = dict(os.environ, MYPYPATH=str(STUBS[clipper2].parent.parent))
+    # mypy finds an installed package by itself and refuses site-packages in MYPYPATH.
+    root = STUBS[clipper2].parent.parent
+    env = dict(os.environ)
+    if root.name != "site-packages":
+        env["MYPYPATH"] = str(root)
     result = subprocess.run(
         [sys.executable, "-m", "mypy", "--strict", "--no-incremental", str(sample)],
         capture_output=True,

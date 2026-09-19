@@ -186,6 +186,11 @@ def run_ref(records: list[str], cli: Path | None = None, timeout: float = NO_HAN
                 replies += [r.rstrip("\n") for r in done if r.endswith("\n")]
                 replies.append(HANG)
                 continue
+        if proc.returncode < 0 and timeout == HANG_TIMEOUT:
+            # Killed by a signal: on Linux the same runaway loop can exhaust memory first.
+            replies += proc.stdout.splitlines()
+            replies.append(HANG)
+            continue
         assert proc.returncode == 0, f"ref_cli exited {proc.returncode}: {proc.stderr}"
         got = proc.stdout.splitlines()
         assert len(replies) + len(got) == len(records), (
