@@ -362,11 +362,11 @@ numpy, so the numbers are comparable end to end.
 
 | workload | clipper2-py | pyclipr | pyclipper | shapely |
 | --- | --- | --- | --- | --- |
-| union of 100 random 16-gons | 0.37 ms | 0.34 ms | 0.70 ms | 1.43 ms |
-| union of 1000 random 16-gons | 37.7 ms | 37.3 ms | 76.4 ms | **11.8 ms** |
-| intersection, 10⁵ vertices each | 5.64 ms | 6.53 ms | 31.7 ms | 9.80 ms |
-| round offset, 1000-vertex rosette | 0.38 ms | 0.41 ms | 1.51 ms | **0.24 ms** |
-| two squares, per call | 1.65 µs | 2.43 µs | 2.26 µs | 13.7 µs |
+| union of 100 random 16-gons | 0.31 ms | 0.34 ms | 0.69 ms | 1.32 ms |
+| union of 1000 random 16-gons | 34.4 ms | 35.7 ms | 71.2 ms | **11.4 ms** |
+| intersection, 10⁵ vertices each | 5.25 ms | 5.46 ms | 30.5 ms | 9.51 ms |
+| round offset, 1000-vertex rosette | 0.36 ms | 0.39 ms | 1.46 ms | **0.24 ms** |
+| two squares, per call | 1.14 µs | 2.43 µs | 2.31 µs | 13.9 µs |
 
 clipper2-py and pyclipr wrap the same upstream version and return the same areas to the
 last bit, so the difference between them is binding overhead only, and it shows on small

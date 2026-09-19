@@ -33,28 +33,28 @@ clipper2's.
 
 | library | best of 5 | vs clipper2 | area | output vertices |
 | --- | --- | --- | --- | --- |
-| clipper2 | 12.24 us | - | 2.82025e+11 (-) | 134 |
-| pyclipr | 14.77 us | 1.21x | 2.82025e+11 (exact) | 134 |
-| pyclipper | 40.44 us | 3.30x | 2.82025e+11 (-2.23e-08) | 134 |
-| shapely | 106.10 us | 8.67x | 2.82025e+11 (+1.07e-08) | 140 |
+| clipper2 | 12.97 us | - | 2.82025e+11 (-) | 134 |
+| pyclipr | 14.86 us | 1.15x | 2.82025e+11 (exact) | 134 |
+| pyclipper | 40.24 us | 3.10x | 2.82025e+11 (-2.23e-08) | 134 |
+| shapely | 103.24 us | 7.96x | 2.82025e+11 (+1.07e-08) | 140 |
 
 ### N = 100
 
 | library | best of 5 | vs clipper2 | area | output vertices |
 | --- | --- | --- | --- | --- |
-| clipper2 | 367.54 us | - | 1.26789e+12 (-) | 237 |
-| pyclipr | 343.13 us | 0.93x | 1.26789e+12 (exact) | 237 |
-| pyclipper | 695.26 us | 1.89x | 1.26789e+12 (+1.24e-07) | 237 |
-| shapely | 1.43 ms | 3.89x | 1.26789e+12 (+1.10e-07) | 245 |
+| clipper2 | 310.14 us | - | 1.26789e+12 (-) | 237 |
+| pyclipr | 338.24 us | 1.09x | 1.26789e+12 (exact) | 237 |
+| pyclipper | 691.24 us | 2.23x | 1.26789e+12 (+1.24e-07) | 237 |
+| shapely | 1.32 ms | 4.24x | 1.26789e+12 (+1.10e-07) | 245 |
 
 ### N = 1000
 
 | library | best of 5 | vs clipper2 | area | output vertices |
 | --- | --- | --- | --- | --- |
-| clipper2 | 37.65 ms | - | 1.46318e+12 (-) | 143 |
-| pyclipr | 37.28 ms | 0.99x | 1.46318e+12 (exact) | 143 |
-| pyclipper | 76.37 ms | 2.03x | 1.46318e+12 (+2.96e-07) | 143 |
-| shapely | 11.81 ms | 0.31x | 1.46318e+12 (+3.02e-07) | 144 |
+| clipper2 | 34.44 ms | - | 1.46318e+12 (-) | 143 |
+| pyclipr | 35.70 ms | 1.04x | 1.46318e+12 (exact) | 143 |
+| pyclipper | 71.18 ms | 2.07x | 1.46318e+12 (+2.96e-07) | 143 |
+| shapely | 11.41 ms | 0.33x | 1.46318e+12 (+3.02e-07) | 144 |
 
 ## Intersection of two large polygons
 
@@ -62,28 +62,28 @@ clipper2's.
 
 | library | best of 5 | vs clipper2 | area | output vertices |
 | --- | --- | --- | --- | --- |
-| clipper2 | 53.65 us | - | 1.95983e+12 (-) | 809 |
-| pyclipr | 57.11 us | 1.06x | 1.95983e+12 (exact) | 809 |
-| pyclipper | 302.25 us | 5.63x | 1.95983e+12 (+1.57e-09) | 809 |
-| shapely | 116.19 us | 2.17x | 1.95983e+12 (+1.48e-09) | 810 |
+| clipper2 | 51.69 us | - | 1.95983e+12 (-) | 809 |
+| pyclipr | 54.44 us | 1.05x | 1.95983e+12 (exact) | 809 |
+| pyclipper | 298.95 us | 5.78x | 1.95983e+12 (+1.57e-09) | 809 |
+| shapely | 114.81 us | 2.22x | 1.95983e+12 (+1.48e-09) | 810 |
 
 ### 10000 vertices each
 
 | library | best of 5 | vs clipper2 | area | output vertices |
 | --- | --- | --- | --- | --- |
-| clipper2 | 555.89 us | - | 1.95984e+12 (-) | 8063 |
-| pyclipr | 536.51 us | 0.97x | 1.95984e+12 (exact) | 8063 |
-| pyclipper | 3.03 ms | 5.45x | 1.95984e+12 (-4.85e-11) | 6252 |
-| shapely | 972.54 us | 1.75x | 1.95984e+12 (+2.81e-11) | 8064 |
+| clipper2 | 506.28 us | - | 1.95984e+12 (-) | 8063 |
+| pyclipr | 536.46 us | 1.06x | 1.95984e+12 (exact) | 8063 |
+| pyclipper | 2.93 ms | 5.79x | 1.95984e+12 (-4.85e-11) | 6252 |
+| shapely | 962.79 us | 1.90x | 1.95984e+12 (+2.81e-11) | 8064 |
 
 ### 100000 vertices each
 
 | library | best of 5 | vs clipper2 | area | output vertices |
 | --- | --- | --- | --- | --- |
-| clipper2 | 5.64 ms | - | 1.95984e+12 (-) | 80605 |
-| pyclipr | 6.53 ms | 1.16x | 1.95984e+12 (exact) | 80605 |
-| pyclipper | 31.70 ms | 5.62x | 1.95984e+12 (-8.93e-11) | 60400 |
-| shapely | 9.80 ms | 1.74x | 1.95984e+12 (+1.43e-11) | 80606 |
+| clipper2 | 5.25 ms | - | 1.95984e+12 (-) | 80605 |
+| pyclipr | 5.46 ms | 1.04x | 1.95984e+12 (exact) | 80605 |
+| pyclipper | 30.45 ms | 5.80x | 1.95984e+12 (-8.93e-11) | 60400 |
+| shapely | 9.51 ms | 1.81x | 1.95984e+12 (+1.43e-11) | 80606 |
 
 ## Offsetting with round joins
 
@@ -93,10 +93,10 @@ Round joins are approximated differently by each library (clipper2 and pyclipr f
 
 | library | best of 5 | vs clipper2 | area | output vertices |
 | --- | --- | --- | --- | --- |
-| clipper2 | 377.26 us | - | 3.80519e+12 (-) | 1547 |
-| pyclipr | 414.82 us | 1.10x | 3.80519e+12 (exact) | 1547 |
-| pyclipper | 1.51 ms | 4.01x | 3.80525e+12 (+1.52e-05) | 5924 |
-| shapely | 238.18 us | 0.63x | 3.80517e+12 (-4.45e-06) | 1445 |
+| clipper2 | 359.01 us | - | 3.80519e+12 (-) | 1547 |
+| pyclipr | 390.79 us | 1.09x | 3.80519e+12 (exact) | 1547 |
+| pyclipper | 1.46 ms | 4.08x | 3.80525e+12 (+1.52e-05) | 5924 |
+| shapely | 238.62 us | 0.66x | 3.80517e+12 (-4.45e-06) | 1445 |
 
 ## Call overhead
 
@@ -106,8 +106,8 @@ The geometry is trivial, so this is conversion and call overhead.
 
 | library | best of 5 | vs clipper2 | area | output vertices |
 | --- | --- | --- | --- | --- |
-| clipper2 | 1.65 us | - | 2500 (-) | 4 |
-| pyclipr | 2.43 us | 1.47x | 2500 (exact) | 4 |
-| pyclipper | 2.26 us | 1.37x | 2500 (exact) | 4 |
-| shapely | 13.66 us | 8.27x | 2500 (exact) | 5 |
+| clipper2 | 1.14 us | - | 2500 (-) | 4 |
+| pyclipr | 2.43 us | 2.12x | 2500 (exact) | 4 |
+| pyclipper | 2.31 us | 2.02x | 2500 (exact) | 4 |
+| shapely | 13.89 us | 12.14x | 2500 (exact) | 5 |
 
