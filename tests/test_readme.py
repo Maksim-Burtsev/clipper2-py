@@ -1,7 +1,7 @@
-"""Every ```python block in README.md runs, and prints what its `# ->` comments say.
+"""Every ```python block in README.md and docs/guide.md runs and prints what it claims.
 
-The blocks share one namespace and run in the order they appear, the way the README is
-read.  A `# -> ...` comment is one expected line of output, in order.
+The blocks of one page share a namespace and run in the order they appear, the way the page
+is read.  A `# -> ...` comment is one expected line of output, in order.
 """
 
 import contextlib
@@ -9,17 +9,20 @@ import io
 import re
 from pathlib import Path
 
-README = Path(__file__).resolve().parents[1] / "README.md"
-BLOCKS = re.findall(r"^```python\n(.*?)^```", README.read_text(encoding="utf-8"), re.S | re.M)
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_readme_blocks_run_and_print_what_they_claim():
-    assert len(BLOCKS) > 5, "no python blocks found in README.md"
+@pytest.mark.parametrize("page", ["README.md", "docs/guide.md"])
+def test_python_blocks_run_and_print_what_they_claim(page):
+    blocks = re.findall(r"^```python\n(.*?)^```", (ROOT / page).read_text(encoding="utf-8"), re.S | re.M)
+    assert len(blocks) >= 4, f"no python blocks found in {page}"
     namespace: dict = {}
-    for number, block in enumerate(BLOCKS, 1):
+    for number, block in enumerate(blocks, 1):
         expected = [line.split("# ->", 1)[1].strip() for line in block.splitlines() if "# ->" in line]
         stdout = io.StringIO()
         with contextlib.redirect_stdout(stdout):
-            exec(compile(block, f"README.md block {number}", "exec"), namespace)
+            exec(compile(block, f"{page} block {number}", "exec"), namespace)
         printed = [line.rstrip() for line in stdout.getvalue().splitlines()]
-        assert printed == expected, f"block {number}:\n{block}"
+        assert printed == expected, f"{page} block {number}:\n{block}"
