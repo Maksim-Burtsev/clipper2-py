@@ -19,6 +19,7 @@ from __future__ import annotations
 import os
 import struct
 import subprocess
+import sys
 import tempfile
 import warnings
 from pathlib import Path
@@ -161,6 +162,17 @@ HANG_TIMEOUT = 60
 NO_HANG_TIMEOUT = 900
 
 
+def _limit_memory_posix() -> None:
+    # On Linux, upstream's runaway Triangulate loop allocates until the machine dies; a CI
+    # runner was lost that way.  With a cap the reference CLI dies alone.
+    import resource
+
+    resource.setrlimit(resource.RLIMIT_AS, (4 << 30, 4 << 30))
+
+
+_limit_memory = _limit_memory_posix if sys.platform.startswith("linux") else None
+
+
 def run_ref(records: list[str], cli: Path | None = None, timeout: float = NO_HANG_TIMEOUT
             ) -> list[str]:
     """One reply per record.  Upstream's Triangulate does not return on some inputs (issue #2)
@@ -178,7 +190,7 @@ def run_ref(records: list[str], cli: Path | None = None, timeout: float = NO_HAN
             try:
                 proc = subprocess.run(
                     [str(cli), str(infile)], capture_output=True, text=True, check=False,
-                    timeout=timeout,
+                    timeout=timeout, preexec_fn=_limit_memory,
                 )
             except subprocess.TimeoutExpired as exc:
                 out = exc.stdout or b""
@@ -186,6 +198,13 @@ def run_ref(records: list[str], cli: Path | None = None, timeout: float = NO_HAN
                 replies += [r.rstrip("\n") for r in done if r.endswith("\n")]
                 replies.append(HANG)
                 continue
+        if timeout == HANG_TIMEOUT and "bad_alloc" in proc.stdout:
+            # The record that ran out of memory: everything before it is a real reply.
+            good = proc.stdout.splitlines()
+            good = good[: next(i for i, r in enumerate(good) if "bad_alloc" in r)]
+            replies += good
+            replies.append(HANG)
+            continue
         if proc.returncode < 0 and timeout == HANG_TIMEOUT:
             # Killed by a signal: on Linux the same runaway loop can exhaust memory first.
             replies += proc.stdout.splitlines()
