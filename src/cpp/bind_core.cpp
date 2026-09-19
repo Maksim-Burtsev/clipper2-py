@@ -371,6 +371,29 @@ void bind_core(py::module_& m) {
       },
       py::arg("off_pt"), py::arg("seg1"), py::arg("seg2"));
 
+  // Upstream returns bool and leaves its out-parameter untouched when the lines are
+  // parallel; here that is None.
+  m.def(
+      "get_line_intersect_pt",
+      [](const Geometry& ln1a, const Geometry& ln1b, const Geometry& ln2a, const Geometry& ln2b) {
+        auto impl = [](auto&& a, auto&& b, auto&& c, auto&& d) -> py::object {
+          std::decay_t<decltype(a)> ip;
+          if (!without_gil([&] { return cl::GetLineIntersectPt(a, b, c, d, ip); })) return py::none();
+          return from_point(ip);
+        };
+        return dispatch(
+            {ln1a, ln1b, ln2a, ln2b},
+            [&] {
+              return impl(to_point<int64_t>(ln1a), to_point<int64_t>(ln1b),
+                          to_point<int64_t>(ln2a), to_point<int64_t>(ln2b));
+            },
+            [&] {
+              return impl(to_point<double>(ln1a), to_point<double>(ln1b),
+                          to_point<double>(ln2a), to_point<double>(ln2b));
+            });
+      },
+      py::arg("ln1a"), py::arg("ln1b"), py::arg("ln2a"), py::arg("ln2b"));
+
   // --- clipper.h --------------------------------------------------------------------
 
   m.def(

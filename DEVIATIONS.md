@@ -78,6 +78,8 @@ upstream, so float input is a `TypeError` there too.
   `Execute` overload that takes a `DeltaCallback64` is `execute(callable)`: as upstream, it
   offsets with a delta of 1.0 and leaves the callback set on the object afterwards.
 * `triangulate(...)` returns `(TriangulateResult, paths)`.
+* `get_line_intersect_pt(...)` returns the point, or `None` where upstream returns `false`
+  and leaves its out-parameter untouched.
 * `strip_duplicates(path, is_closed_path)` returns the stripped path; C++ edits its
   argument in place.
 * Upstream's `Execute` returning `false` (an internal inconsistency it reports through the
@@ -172,7 +174,18 @@ the caller's job.
 `fn(path, path_normals, curr_idx, prev_idx)` returns the delta to use, with `path` as an
 int64 array and `path_normals` as a float64 one.
 
-## 10. What is not bound
+## 10. One guard against an upstream crash
+
+Clipper2 2.0.1 (and its main branch) reads `path.size() - 1` of an **empty path** when the
+end type is an open one (`JOINED`, `BUTT`, `SQUARE`, `ROUND`) and crashes the process. From
+Python that would take the interpreter down, so `inflate_paths`, `ClipperOffset.add_path`
+and `add_paths` drop empty paths before upstream sees them when the end type is an open
+one. An empty path has nothing to offset, and with `EndType.POLYGON` upstream itself
+produces nothing for it, so no result changes. This is the only place where the binding
+steps in front of upstream's code
+([#1](https://github.com/Maksim-Burtsev/clipper2-py/issues/1)).
+
+## 11. What is not bound
 
 `clipper.export.h` (a C ABI for DLL users) and, per the coverage table in
 `docs/api-map.md`, upstream's C++-only plumbing: the type-conversion templates

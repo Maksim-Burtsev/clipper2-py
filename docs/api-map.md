@@ -75,7 +75,7 @@ Conventions used below:
 | `PerpendicDistFromLineSqrd` | `perpendic_dist_from_line_sqrd(pt, line1, line2)` |
 | `Area(Path)`, `Area(Paths)` | `area(path)` — a path or paths, by nesting depth |
 | `IsPositive` | `is_positive(poly)` |
-| `GetLineIntersectPt` | **not bound** — `bool` plus an out-parameter that upstream leaves untouched when it returns false; the Python shape is an open decision ([#3](https://github.com/Maksim-Burtsev/clipper2-py/issues/3)) |
+| `GetLineIntersectPt` | `get_line_intersect_pt(ln1a, ln1b, ln2a, ln2b) -> point \| None` — `None` where upstream returns `false` and leaves its out-parameter untouched |
 | `TranslatePoint` | `translate_point(pt, dx, dy)` |
 | `ReflectPoint` | `reflect_point(pt, pivot)` |
 | `SegmentsIntersect` | `segments_intersect(seg1a, seg1b, seg2a, seg2b, inclusive=False)` — 64 family only, as upstream declares it |

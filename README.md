@@ -104,16 +104,14 @@ pyclipr wraps the same Clipper2 and is as fast, but ships no Linux wheels and ha
 API. pyclipper is Clipper1. shapely (GEOS) wins on big unions and on buffering.
 [Method and full results](https://github.com/Maksim-Burtsev/clipper2-py/blob/main/benchmarks/RESULTS.md).
 
-## Known upstream issues
+## Known upstream issue
 
-Two bugs of Clipper2 2.0.1, also present in its main branch, are reachable from Python.
-The binding changes nothing in upstream's algorithms, so it does not hide them:
-
-- `ClipperOffset` crashes on an **empty path with an open end type**
-  ([#1](https://github.com/Maksim-Burtsev/clipper2-py/issues/1));
-- `triangulate` may never return on paths with **duplicate or self-intersecting
-  vertices**, and which inputs do depends on the platform
-  ([#2](https://github.com/Maksim-Burtsev/clipper2-py/issues/2)).
+`triangulate` may never return, or may exhaust memory, on paths with **duplicate or
+self-intersecting vertices** — a bug of Clipper2 2.0.1 that is also in its main branch, and
+which inputs trigger it depends on the platform
+([#2](https://github.com/Maksim-Burtsev/clipper2-py/issues/2)). Upstream documents that
+`Triangulate` does not accept intersecting paths; passing the input through `union` first
+makes it safe. The binding changes nothing in upstream's algorithms, so it cannot hide this.
 
 ## License
 

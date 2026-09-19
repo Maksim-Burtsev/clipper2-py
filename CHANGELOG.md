@@ -4,7 +4,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Thi
 has its own [semantic version](https://semver.org/spec/v2.0.0.html), independent of the
 Clipper2 version it bundles; `clipper2.CLIPPER2_VERSION` tells the latter.
 
-## 0.1.0 — unreleased
+## 0.1.0 — 2026-09-19
 
 First release. Bundles Clipper2 2.0.1 (upstream tag `Clipper2_2.0.1`).
 
@@ -33,12 +33,10 @@ First release. Bundles Clipper2 2.0.1 (upstream tag `Clipper2_2.0.1`).
 
 ### Known issues
 
-- Upstream's `ClipperOffset` segfaults on an empty path with an open end type, and
-  upstream's `Triangulate` does not return on some degenerate inputs. The binding adds no
-  guard against either
-  ([#1](https://github.com/Maksim-Burtsev/clipper2-py/issues/1),
-  [#2](https://github.com/Maksim-Burtsev/clipper2-py/issues/2)).
-- `GetLineIntersectPt` is not bound
-  ([#3](https://github.com/Maksim-Burtsev/clipper2-py/issues/3)); neither is
-  `clipper.export.h`, upstream's C ABI for DLL users. See [DEVIATIONS.md](DEVIATIONS.md)
+- Upstream's `Triangulate` does not return, or exhausts memory, on some degenerate inputs;
+  the binding cannot guard against it
+  ([#2](https://github.com/Maksim-Burtsev/clipper2-py/issues/2)). Upstream's crash in
+  `ClipperOffset` on an empty path with an open end type is guarded: such paths are dropped
+  ([#1](https://github.com/Maksim-Burtsev/clipper2-py/issues/1)).
+- `clipper.export.h`, upstream's C ABI for DLL users, is not bound. See [DEVIATIONS.md](DEVIATIONS.md)
   and [docs/api-map.md](docs/api-map.md).

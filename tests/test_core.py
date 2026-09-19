@@ -553,3 +553,15 @@ def test_ellipse_with_two_radii():
     circle = clipper2.ellipse((0.0, 0.0), 5.0)
     assert circle.shape == (7, 2)
     assert np.allclose(np.hypot(circle[:, 0], circle[:, 1]), 5.0)
+
+
+def test_get_line_intersect_pt_returns_the_point_or_none():
+    assert clipper2.get_line_intersect_pt((0, 0), (10, 10), (0, 10), (10, 0)) == (5, 5)
+    assert clipper2.get_line_intersect_pt((0.0, 0.0), (1.0, 1.0), (0.0, 1.0), (1.0, 0.0)) == (0.5, 0.5)
+    # parallel lines: upstream returns false and leaves its out-parameter untouched
+    assert clipper2.get_line_intersect_pt((0, 0), (10, 0), (0, 5), (10, 5)) is None
+    # upstream constrains the point to the first segment
+    assert clipper2.get_line_intersect_pt((0, 0), (2, 2), (0, 10), (10, 0)) == (2, 2)
+    with pytest.raises(TypeError):
+        clipper2.get_line_intersect_pt((0, 0), (10, 10), (0.0, 10.0), (10.0, 0.0))
+    assert z.get_line_intersect_pt((0, 0, 7), (10, 10, 7), (0, 10, 7), (10, 0, 7))[:2] == (5, 5)

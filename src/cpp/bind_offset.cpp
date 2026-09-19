@@ -1,5 +1,6 @@
 // ClipperOffset and inflate_paths.
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -34,6 +35,17 @@ cl::DeltaCallback64 delta_callback(const py::object& fn, ExecState& state) {
 }
 
 }  // namespace
+
+// Upstream 2.0.1 indexes path.size() - 1 of an empty path when the end type is an open one and
+// crashes (issue #1). Such a path has nothing to offset, so it is dropped before upstream sees
+// it, which is what upstream itself does with it for EndType::Polygon.
+template <class T>
+void drop_empty_open_paths(cl::Paths<T>& paths, cl::EndType et) {
+  if (et == cl::EndType::Polygon) return;
+  paths.erase(std::remove_if(paths.begin(), paths.end(),
+                             [](const cl::Path<T>& p) { return p.empty(); }),
+              paths.end());
+}
 
 void bind_offset(py::module_& m) {
   py::class_<CO> co(m, "ClipperOffset", py::module_local());
@@ -72,14 +84,18 @@ void bind_offset(py::module_& m) {
           "add_path",
           [](CO& self, const Geometry& path, cl::JoinType jt, cl::EndType et) {
             check_idle(self.state, "ClipperOffset");
-            self.AddPath(to_path<int64_t>(path), jt, et);
+            cl::Paths64 one{to_path<int64_t>(path)};
+            drop_empty_open_paths(one, et);
+            if (!one.empty()) self.AddPath(one[0], jt, et);
           },
           py::arg("path"), py::arg("jt_"), py::arg("et_"))
       .def(
           "add_paths",
           [](CO& self, const Geometry& paths, cl::JoinType jt, cl::EndType et) {
             check_idle(self.state, "ClipperOffset");
-            self.AddPaths(to_paths<int64_t>(paths), jt, et);
+            auto p = to_paths<int64_t>(paths);
+            drop_empty_open_paths(p, et);
+            self.AddPaths(p, jt, et);
           },
           py::arg("paths"), py::arg("jt_"), py::arg("et_"))
       .def(
@@ -151,6 +167,7 @@ void bind_offset(py::module_& m) {
             [&]() -> py::object {
               reject_precision(precision, "inflate_paths", "precision");
               auto p = to_paths<int64_t>(paths);
+              if (delta != 0.0) drop_empty_open_paths(p, et);  // delta 0 returns the input as is
               return from_paths(without_gil([&] {
                 return cl::InflatePaths(p, delta, jt, et, miter_limit, arc_tolerance);
               }));
@@ -158,6 +175,7 @@ void bind_offset(py::module_& m) {
             [&]() -> py::object {
               const int prec = precision_arg(precision, 2);
               auto p = to_paths<double>(paths);
+              if (delta != 0.0) drop_empty_open_paths(p, et);
               return from_paths(without_gil([&] {
                 return cl::InflatePaths(p, delta, jt, et, miter_limit, prec, arc_tolerance);
               }));

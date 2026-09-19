@@ -483,3 +483,20 @@ def test_the_z_callback_exists_only_in_the_z_build():
     assert not hasattr(clipper2.ClipperOffset(), "set_z_callback")
     assert hasattr(z.ClipperOffset(), "set_z_callback")
     assert clipper2.ClipperOffset is not z.ClipperOffset
+
+
+@pytest.mark.parametrize("end_type", ["JOINED", "BUTT", "SQUARE", "ROUND", "POLYGON"])
+def test_an_empty_path_is_dropped_instead_of_crashing_upstream(end_type):
+    # Upstream 2.0.1 indexes size() - 1 of an empty path for the open end types (issue #1).
+    et = getattr(clipper2.EndType, end_type)
+    assert clipper2.inflate_paths([[]], 10, clipper2.JoinType.ROUND, et) == []
+    line = [(0, 0), (10, 0)]
+    with_empty = clipper2.inflate_paths([[], line], 2, clipper2.JoinType.MITER, et)
+    without = clipper2.inflate_paths([line], 2, clipper2.JoinType.MITER, et)
+    assert [p.tolist() for p in with_empty] == [p.tolist() for p in without]
+    assert clipper2.inflate_paths(np.empty((1, 0, 2)), 1.0, clipper2.JoinType.ROUND, et, precision=2) == []
+
+    offsetter = clipper2.ClipperOffset()
+    offsetter.add_path([], clipper2.JoinType.MITER, et)
+    offsetter.add_paths([[], line], clipper2.JoinType.MITER, et)
+    assert [p.tolist() for p in offsetter.execute(2)] == [p.tolist() for p in without]

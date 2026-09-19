@@ -390,6 +390,14 @@ def get_closest_point_on_segment(
 def get_closest_point_on_segment(
     off_pt: _PointDLike, seg1: _PointDLike, seg2: _PointDLike
 ) -> _PointD: ...
+@overload
+def get_line_intersect_pt(
+    ln1a: _Point64Like, ln1b: _Point64Like, ln2a: _Point64Like, ln2b: _Point64Like
+) -> _Point64 | None: ...
+@overload
+def get_line_intersect_pt(
+    ln1a: _PointDLike, ln1b: _PointDLike, ln2a: _PointDLike, ln2b: _PointDLike
+) -> _PointD | None: ...
 
 # --- clipper.h ------------------------------------------------------------------------------
 
