@@ -69,6 +69,8 @@ inline Family combine(Family a, Family b) {
 // limit, a self-referential sequence would recurse until the C stack runs out.
 inline constexpr int kMaxNesting = 3;
 
+inline int nesting_depth(py::handle obj, int depth = 0);
+
 // The family numpy.asarray would infer for a point / path / paths argument.
 // An input without values (spec: "an empty input has no dtype") is Family::Empty.
 inline Family family_of(py::handle obj, int depth = 0) {
@@ -80,26 +82,18 @@ inline Family family_of(py::handle obj, int depth = 0) {
   if (py::isinstance<py::int_>(obj)) return Family::Int64;
   if (py::isinstance<py::float_>(obj)) return Family::Double;
 
-  py::object arr;
-  bool inhomogeneous = false;
-  try {
-    arr = np_asarray_fn()(obj);
-  } catch (py::error_already_set& e) {
-    // Paths of different lengths are legal input but not a rectangular array.
-    if (!e.matches(PyExc_ValueError)) throw;
-    inhomogeneous = true;
-  }
-  if (!inhomogeneous) {
-    py::array a(arr);
-    // A sequence without values has no dtype (numpy calls it float64), so look inside it:
-    // `[]` is Empty, `[np.empty((0, 2))]` is Double. An ndarray keeps the dtype it was given.
-    if (a.size() != 0 || py::isinstance<py::array>(obj)) {
-      const char kind = a.dtype().kind();
-      if (kind == 'i' || kind == 'u') return Family::Int64;
-      if (kind == 'f') return Family::Double;
-      if (kind != 'O')
-        throw py::type_error("coordinates must be of integer or float dtype, got " + dtype_name(a));
-    }
+  // A list of paths is walked path by path: paths of different lengths are legal input but
+  // not a rectangular array (numpy < 1.24 warns about them, later ones raise).
+  if (py::isinstance<py::array>(obj) || nesting_depth(obj) <= 2) {
+    py::array a(np_asarray_fn()(obj));
+    // A sequence without values has no dtype (numpy calls it float64): `[]` is Empty.
+    // An ndarray keeps the dtype it was given even when it is empty.
+    if (a.size() == 0 && !py::isinstance<py::array>(obj)) return Family::Empty;
+    const char kind = a.dtype().kind();
+    if (kind == 'i' || kind == 'u') return Family::Int64;
+    if (kind == 'f') return Family::Double;
+    if (kind != 'O')
+      throw py::type_error("coordinates must be of integer or float dtype, got " + dtype_name(a));
   }
   Family fam = Family::Empty;
   for (py::handle item : py::reinterpret_borrow<py::object>(obj))
@@ -109,7 +103,7 @@ inline Family family_of(py::handle obj, int depth = 0) {
 
 // Nesting depth: 1 == point, 2 == path, 3 == paths. Used where C++ picks an overload
 // by static type (GetBounds, Area, RamerDouglasPeucker).
-inline int nesting_depth(py::handle obj, int depth = 0) {
+inline int nesting_depth(py::handle obj, int depth) {
   if (py::isinstance<py::array>(obj)) return static_cast<int>(py::array(py::reinterpret_borrow<py::object>(obj)).ndim());
   if (py::isinstance<py::str>(obj) || py::isinstance<py::bytes>(obj)) return 0;
   if (!PySequence_Check(obj.ptr())) return 0;

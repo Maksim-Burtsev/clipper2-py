@@ -104,6 +104,12 @@ clipper.core.h), so in the D family the third column is an integer value carried
 upstream's own `MakePathZD` does. An N×2 path is also accepted and gets z = 0, which is
 what upstream's `Point` constructor does.
 
+`Rect64` and `RectD` are among the types registered once, in the non-USINGZ extension
+(deviation 6), so in `clipper2.z` they stay two-dimensional: `mid_point()` returns
+`(x, y)`, `as_path()` an N×2 array, and `contains(pt)` wants a plain `(x, y)` — a
+three-element point is a `ValueError` there. Everything compiled into both modules
+(`clipper2.z.mid_point`, `clipper2.z.ellipse`, …) does use three-element points.
+
 `set_z_callback(fn)` takes `fn(e1bot, e1top, e2bot, e2top, pt)` and uses its **return
 value** as the z of `pt`; upstream's callback writes `pt.z` through a reference, which
 Python cannot do. `set_z_callback(None)` removes the callback.

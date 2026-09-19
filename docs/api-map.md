@@ -75,7 +75,7 @@ Conventions used below:
 | `PerpendicDistFromLineSqrd` | `perpendic_dist_from_line_sqrd(pt, line1, line2)` |
 | `Area(Path)`, `Area(Paths)` | `area(path)` — a path or paths, by nesting depth |
 | `IsPositive` | `is_positive(poly)` |
-| `GetLineIntersectPt` | **not bound** — see OPEN QUESTIONS in the phase report: `bool` plus an out-parameter that upstream leaves untouched when it returns false |
+| `GetLineIntersectPt` | **not bound** — `bool` plus an out-parameter that upstream leaves untouched when it returns false; the Python shape is an open decision ([#3](https://github.com/Maksim-Burtsev/clipper2-py/issues/3)) |
 | `TranslatePoint` | `translate_point(pt, dx, dy)` |
 | `ReflectPoint` | `reflect_point(pt, pivot)` |
 | `SegmentsIntersect` | `segments_intersect(seg1a, seg1b, seg2a, seg2b, inclusive=False)` — 64 family only, as upstream declares it |
@@ -137,7 +137,7 @@ upstream's, quirk included.
 | `Union(subjects, fillrule[, precision])` | `union(subjects, fillrule, precision=None)` |
 | `Difference` (2) | `difference(subjects, clips, fillrule, decimal_prec=None)` |
 | `Xor` (2) | `xor(subjects, clips, fillrule, decimal_prec=None)` |
-| `InflatePaths(Paths64, delta, jt, et, miter_limit, arc_tolerance)` | `inflate_paths(paths, delta, jt, et, miter_limit=2.0, precision=None, arc_tolerance=0.0)` |
+| `InflatePaths(Paths64, delta, jt, et, miter_limit, arc_tolerance)` | `inflate_paths(paths, delta, jt, et, miter_limit=2.0, *, precision=None, arc_tolerance=0.0)` |
 | `InflatePaths(PathsD, delta, jt, et, miter_limit, precision, arc_tolerance)` | same function; `precision` sits where the D overload declares it |
 | `TranslatePath` (template + 2 overloads) | `translate_path(path, dx, dy)` |
 | `TranslatePaths` (template + 2 overloads) | `translate_paths(paths, dx, dy)` |
@@ -153,7 +153,7 @@ upstream's, quirk included.
 | `MakePath` (vector and C-array overloads) | `make_path(list)` — a flat sequence of integers |
 | `MakePathD` (vector and C-array overloads) | `make_path_d(list)` — a flat sequence of numbers |
 | `MakePathZ`, `MakePathZD` (USINGZ) | not bound: compile-time-sized C-array templates with no runtime form; pass an N×3 array, or `make_path` for z = 0 |
-| `TrimCollinear(Path64, is_open)` / `(PathD, precision, is_open)` | `trim_collinear(path, precision=None, is_open_path=False)` |
+| `TrimCollinear(Path64, is_open)` / `(PathD, precision, is_open)` | `trim_collinear(path, *, precision=None, is_open_path=False)` |
 | `Distance` | `distance(pt1, pt2)` |
 | `Length` | `length(path, is_closed_path=False)` |
 | `NearCollinear` | `near_collinear(pt1, pt2, pt3, sin_sqrd_min_angle_rads)` |
@@ -217,7 +217,7 @@ defaults to 2 for a `RectD` and is refused for a `Rect64`.
 | C++ | Python |
 | --- | --- |
 | `TriangulateResult` | `TriangulateResult.SUCCESS / FAIL / NO_POLYGONS / PATHS_INTERSECT` (registered once, in `_clipper2`) |
-| `Triangulate(Paths64, Paths64& solution, useDelaunay)` | `triangulate(pp, dec_places=None, use_delaunay=True) -> (TriangulateResult, paths)` |
+| `Triangulate(Paths64, Paths64& solution, useDelaunay)` | `triangulate(pp, *, dec_places=None, use_delaunay=True) -> (TriangulateResult, paths)` |
 | `Triangulate(PathsD, decPlaces, PathsD& solution, useDelaunay)` | same function; `dec_places` sits where upstream declares it and, like upstream, has no default: the D family requires it |
 
 ## clipper.export.h
