@@ -14,6 +14,21 @@ namespace {
 // Upstream's Execute returns false without raising; spec decision 7 turns that into an error.
 [[noreturn]] void raise_execute_failed() { throw cl::Clipper2Exception(cl::undefined_error); }
 
+// An exception from a Python callback unwinds through upstream's Execute and skips the
+// CleanUp() it ends with; run it here so the clipper is left as after a normal Execute.
+template <class C, class F>
+bool run_execute(C& self, F&& f) {
+  struct Access : C {
+    using cl::ClipperBase::CleanUp;
+  };
+  try {
+    return without_gil(f);
+  } catch (...) {
+    (self.*(&Access::CleanUp))();
+    throw;
+  }
+}
+
 template <class C>
 void add_clipper_base(const py::module_& m, py::class_<C>& c) {
   c.def_property("preserve_collinear",
@@ -114,7 +129,7 @@ void bind_engine(py::module_& m) {
           "execute",
           [](cl::Clipper64& self, cl::ClipType clip_type, cl::FillRule fill_rule) {
             cl::Paths64 closed, open;
-            if (!without_gil([&] { return self.Execute(clip_type, fill_rule, closed, open); }))
+            if (!run_execute(self, [&] { return self.Execute(clip_type, fill_rule, closed, open); }))
               raise_execute_failed();
             return py::make_tuple(from_paths(closed), from_paths(open));
           },
@@ -124,7 +139,7 @@ void bind_engine(py::module_& m) {
           [](cl::Clipper64& self, cl::ClipType clip_type, cl::FillRule fill_rule) {
             std::unique_ptr<cl::PolyTree64> tree(new cl::PolyTree64());
             cl::Paths64 open;
-            if (!without_gil([&] { return self.Execute(clip_type, fill_rule, *tree, open); }))
+            if (!run_execute(self, [&] { return self.Execute(clip_type, fill_rule, *tree, open); }))
               raise_execute_failed();
             return py::make_tuple(py::cast(std::move(tree)), from_paths(open));
           },
@@ -155,7 +170,7 @@ void bind_engine(py::module_& m) {
           "execute",
           [](cl::ClipperD& self, cl::ClipType clip_type, cl::FillRule fill_rule) {
             cl::PathsD closed, open;
-            if (!without_gil([&] { return self.Execute(clip_type, fill_rule, closed, open); }))
+            if (!run_execute(self, [&] { return self.Execute(clip_type, fill_rule, closed, open); }))
               raise_execute_failed();
             return py::make_tuple(from_paths(closed), from_paths(open));
           },
@@ -165,7 +180,7 @@ void bind_engine(py::module_& m) {
           [](cl::ClipperD& self, cl::ClipType clip_type, cl::FillRule fill_rule) {
             std::unique_ptr<cl::PolyTreeD> tree(new cl::PolyTreeD());
             cl::PathsD open;
-            if (!without_gil([&] { return self.Execute(clip_type, fill_rule, *tree, open); }))
+            if (!run_execute(self, [&] { return self.Execute(clip_type, fill_rule, *tree, open); }))
               raise_execute_failed();
             return py::make_tuple(py::cast(std::move(tree)), from_paths(open));
           },

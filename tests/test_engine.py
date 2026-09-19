@@ -264,11 +264,9 @@ def test_an_exception_in_a_callback_propagates_out_of_execute():
     with pytest.raises(ValueError, match="boom"):
         clipper.execute(z.ClipType.INTERSECTION, NON_ZERO)
 
-    # the clipper is usable again after clear()
-    clipper.clear()
+    # the clipper is left as after a normal execute: usable, its paths still added
     clipper.set_z_callback(None)
-    clipper.add_subject([[(0, 0, 1), (10, 0, 1), (10, 10, 1), (0, 10, 1)]])
-    assert z.area(clipper.execute(z.ClipType.UNION, NON_ZERO)[0]) == 100.0
+    assert z.area(clipper.execute(z.ClipType.INTERSECTION, NON_ZERO)[0]) == 25.0
 
 
 def test_z_callback_must_return_an_integer():

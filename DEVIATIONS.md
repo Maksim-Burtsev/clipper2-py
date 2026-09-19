@@ -125,9 +125,10 @@ module's instance (`clipper2.Clipper64.clear(z_clipper)`) is not guarded.
 
 The GIL is released while upstream code runs and re-acquired for callbacks, so two threads
 clip in parallel. An exception raised inside a callback — a z callback, or `ClipperOffset`'s
-delta callback — propagates out of `execute()`. It unwinds through upstream's C++, which
-skips the cleanup `Execute` does at the end: memory is still released (by the object's
-destructor), but call `clear()` before using that `Clipper64` / `ClipperD` again.
+delta callback — propagates out of `execute()`. It unwinds through upstream's C++ and
+would skip the clean-up `Execute` ends with, so the binding runs that same clean-up
+(`ClipperBase::CleanUp`) before re-raising: the clipper is left as after a normal `execute`,
+with its paths still added. `ClipperOffset` keeps no such state.
 
 `ClipperOffset`'s delta callback is upstream's `DeltaCallback64`:
 `fn(path, path_normals, curr_idx, prev_idx)` returns the delta to use, with `path` as an

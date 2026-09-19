@@ -304,8 +304,8 @@ detail; in headline form:
    must not be passed between `clipper2` and `clipper2.z`.
 8. **Callbacks and the GIL**: the GIL is released while upstream code runs, so two
    threads clip in parallel. An exception raised in a callback propagates out of
-   `execute`, unwinding through C++ and skipping upstream's end-of-`Execute` cleanup:
-   memory is still freed, but call `clear()` before reusing that object.
+   `execute`; the binding first runs the clean-up upstream's `Execute` ends with, so the
+   clipper stays usable with its paths still added.
 9. **Not bound**: `clipper.export.h` (a C ABI for DLL users), upstream's C++-only
    plumbing (the type-conversion templates `ScalePath` / `TransformPaths` — use a D
    function's `precision` or numpy's `astype` — the engine-internal structs, and the
