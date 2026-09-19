@@ -31,20 +31,22 @@ clipper2 = pytest.importorskip("clipper2")
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _find_ref_cli() -> Path | None:
-    override = os.environ.get("CLIPPER2_REF_CLI")
+def find_ref_cli(stem: str = "ref_cli", env: str = "CLIPPER2_REF_CLI") -> Path | None:
+    """The reference binary, or None.  `ref_cli_z` (the USINGZ build, used by
+    test_differential_z.py) is looked up exactly the same way."""
+    override = os.environ.get(env)
     if override:
         candidates = [Path(override)]
     else:
         build_dir = REPO_ROOT / "build" / "ref"
-        names = ("ref_cli", "ref_cli.exe")
+        names = (stem, stem + ".exe")
         # MSVC puts the binary in a per-configuration subdirectory.
         dirs = [build_dir] + [build_dir / c for c in ("Release", "RelWithDebInfo", "Debug")]
         candidates = [d / n for d in dirs for n in names]
     return next((c for c in candidates if c.is_file() and os.access(c, os.X_OK)), None)
 
 
-REF_CLI = _find_ref_cli()
+REF_CLI = find_ref_cli()
 
 pytestmark = pytest.mark.skipif(
     REF_CLI is None,
@@ -93,9 +95,10 @@ def _require(*names: str) -> None:
 DTYPE = {"64": np.int64, "d": np.float64}
 
 
-def _norm(a: np.ndarray) -> np.ndarray:
-    """An empty path may legitimately arrive as (0,) or (0, 2); compare it as (0, 2)."""
-    return a.reshape(0, 2) if a.size == 0 else a
+def _norm(a: np.ndarray, cols: int = 2) -> np.ndarray:
+    """An empty path may legitimately arrive as (0,) or (0, 2); compare it as (0, 2).
+    `cols` is 3 in the z build, where a point is (x, y, z)."""
+    return a.reshape(0, cols) if a.size == 0 else a
 
 
 def enc_path(path) -> str:
@@ -114,11 +117,12 @@ def enc_num(v) -> str:
 class Reply:
     """Cursor over the whitespace-separated tokens of one ref_cli reply."""
 
-    __slots__ = ("toks", "i")
+    __slots__ = ("toks", "i", "cols")
 
-    def __init__(self, payload: str):
+    def __init__(self, payload: str, cols: int = 2):
         self.toks = payload.split()
         self.i = 0
+        self.cols = cols
 
     def _take(self, n: int) -> list[str]:
         out = self.toks[self.i : self.i + n]
@@ -134,9 +138,9 @@ class Reply:
 
     def path(self, dtype) -> np.ndarray:
         n = self.int()
-        flat = self._take(2 * n)
+        flat = self._take(self.cols * n)
         conv = int if dtype is np.int64 else float
-        return np.array([conv(t) for t in flat], dtype=dtype).reshape(n, 2)
+        return np.array([conv(t) for t in flat], dtype=dtype).reshape(n, self.cols)
 
     def paths(self, dtype) -> list[np.ndarray]:
         return [self.path(dtype) for _ in range(self.int())]
@@ -150,22 +154,31 @@ class Reply:
 
 
 HANG = "HANG"
-HANG_TIMEOUT = 20  # seconds without ref_cli finishing a batch that normally takes well under one
+# A batch normally takes well under a second.  Only triangulate may really hang, and there a
+# short timeout is what keeps the suite moving; everywhere else a hang is a test failure, so
+# the timeout is only a backstop and is set far above anything a slow CI runner could need.
+HANG_TIMEOUT = 60
+NO_HANG_TIMEOUT = 900
 
 
-def run_ref(records: list[str]) -> list[str]:
-    """One reply per record.  Upstream's Triangulate does not return on some inputs (issue #2).
-    The generators avoid the known ones; should one slip through, its record gets the reply
-    HANG, found from how far ref_cli's flushed output got before the timeout."""
+def run_ref(records: list[str], cli: Path | None = None, timeout: float = NO_HANG_TIMEOUT
+            ) -> list[str]:
+    """One reply per record.  Upstream's Triangulate does not return on some inputs (issue #2)
+    and which inputs those are depends on the platform: a CI run on Linux x86_64/GCC hung on
+    1 of 600 cases that pass on macOS arm64/clang.  The generators avoid the known ones; a case
+    that still hangs gets the reply HANG, found from how far ref_cli's flushed output got
+    before the timeout."""
+    cli = cli or REF_CLI
     replies: list[str] = []
     while len(replies) < len(records):
         with tempfile.TemporaryDirectory() as tmp:
             infile = Path(tmp) / "cases.txt"
-            infile.write_text("\n".join(records[len(replies):]) + "\n")
+            # newline="\n": ref_cli's records are one per "\n" line, on Windows too.
+            infile.write_text("\n".join(records[len(replies):]) + "\n", newline="\n")
             try:
                 proc = subprocess.run(
-                    [str(REF_CLI), str(infile)], capture_output=True, text=True, check=False,
-                    timeout=HANG_TIMEOUT,
+                    [str(cli), str(infile)], capture_output=True, text=True, check=False,
+                    timeout=timeout,
                 )
             except subprocess.TimeoutExpired as exc:
                 out = exc.stdout or b""
@@ -186,27 +199,27 @@ def run_ref(records: list[str]) -> list[str]:
 # --------------------------------------------------------------------------- comparison
 
 
-def arr(value, dtype, where: str) -> np.ndarray:
+def arr(value, dtype, where: str, cols: int = 2) -> np.ndarray:
     """A path returned by the binding, checked against deviation 3 and normalised."""
     if not isinstance(value, np.ndarray):
         raise AssertionError(f"{where}: expected a numpy array, got {type(value).__name__}")
     if value.dtype != dtype:
         raise AssertionError(f"{where}: expected dtype {np.dtype(dtype)}, got {value.dtype}")
-    return _norm(value)
+    return _norm(value, cols)
 
 
-def arrs(value, dtype, where: str) -> list[np.ndarray]:
+def arrs(value, dtype, where: str, cols: int = 2) -> list[np.ndarray]:
     if not isinstance(value, list):
         raise AssertionError(f"{where}: expected a list of paths, got {type(value).__name__}")
-    return [arr(p, dtype, f"{where}[{i}]") for i, p in enumerate(value)]
+    return [arr(p, dtype, f"{where}[{i}]", cols) for i, p in enumerate(value)]
 
 
-def tree_value(node, dtype, where: str = "tree") -> list:
+def tree_value(node, dtype, where: str = "tree", cols: int = 2) -> list:
     return [
         int(node.is_hole),
         int(node.level),
-        arr(node.polygon, dtype, f"{where}.polygon"),
-        [tree_value(c, dtype, f"{where}[{i}]") for i, c in enumerate(node)],
+        arr(node.polygon, dtype, f"{where}.polygon", cols),
+        [tree_value(c, dtype, f"{where}[{i}]", cols) for i, c in enumerate(node)],
     ]
 
 
@@ -250,14 +263,19 @@ class Case:
         self.call = call
 
 
-def check(cases: list[Case]) -> None:
-    replies = run_ref([c.record for c in cases])
+def check(cases: list[Case], cli: Path | None = None, cols: int = 2,
+          may_hang: bool = False) -> None:
+    """`may_hang` is for the triangulate groups only (issue #2, see run_ref).  Everywhere
+    else upstream returning nothing is a failure, not something to tolerate."""
+    timeout = HANG_TIMEOUT if may_hang else NO_HANG_TIMEOUT
+    replies = run_ref([c.record for c in cases], cli, timeout)
     failures = []
     hangs = replies.count(HANG)
     if hangs:
         # The binding would hang the same way, in process: these cases cannot be compared.
         warnings.warn(f"upstream did not return on {hangs} of {len(cases)} cases (issue #2)")
-    assert hangs <= len(cases) // 10, f"upstream hangs on {hangs} of {len(cases)} cases"
+        assert may_hang, f"upstream did not return on {hangs} of {len(cases)} cases"
+        assert hangs <= len(cases) // 10, f"upstream hangs on {hangs} of {len(cases)} cases"
     for case, reply in zip(cases, replies):
         if reply == HANG:
             continue
@@ -287,7 +305,7 @@ def check(cases: list[Case]) -> None:
             if error is not None:
                 reason = f"C++ returned a result, Python raised {error!r}"
             else:
-                out = Reply(reply[2:])
+                out = Reply(reply[2:], cols)
                 ref = case.parse(out)
                 assert out.done(), "unparsed tokens left in a ref_cli reply"
                 reason = diff(ref, got)
@@ -882,7 +900,7 @@ def test_minkowski():
 
 def test_triangulate():
     _require("triangulate")
-    check(build("triangulate"))
+    check(build("triangulate"), may_hang=True)
 
 
 def test_simplify_paths():

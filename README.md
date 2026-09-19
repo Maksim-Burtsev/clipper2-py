@@ -275,11 +275,13 @@ detail; in headline form:
 2. **Points and paths** are tuples and numpy arrays; the input dtype picks the 64 or D
    family, mixing families in one call is a `TypeError`, and where C++ picks an overload
    by static type (`Area(Path)` vs `Area(Paths)`) Python picks by nesting depth.
+   Generators and other one-shot iterators are accepted wherever a sequence is.
    `rect_clip` and `rect_clip_lines` take the family from the rect; `ClipperOffset`,
    `RectClip64` and `RectClipLines64` are 64-only, as upstream declares them.
 3. **Validation** that the C++ compiler does for free: a wrong shape is a `ValueError`,
    an integer that does not fit `int64` is an `OverflowError`, a non-numeric dtype or a
-   float where C++ takes `int64_t` is a `TypeError`, and an index outside a `PolyPath`'s
+   float where C++ takes `int64_t` is a `TypeError`, a `bool` is never a coordinate, and an
+   index outside a `PolyPath`'s
    children is an `IndexError` (C++ has undefined behaviour there). Nothing is ever
    truncated silently.
 4. **Out parameters became return values**: `execute` returns `(closed, open)`,
@@ -298,14 +300,21 @@ detail; in headline form:
 6. **Errors**: `Clipper2Lib::Clipper2Exception` becomes `clipper2.Clipper2Error` with
    upstream's message. Where C++ silently returns an empty result, so does Python.
 7. **The z build** is a second module, `clipper2.z`. Upstream's z is `int64_t` in both
-   families, so a D path carries an integer z in its `float64` third column and a
-   fractional z is truncated towards zero. `set_z_callback(fn)` uses the callback's
+   families, so a D path carries an integer z in its `float64` third column: a
+   fractional z is truncated towards zero, a non-finite one is a `ValueError`, one outside
+   `int64` an `OverflowError`, and above 2**53 the column cannot hold it exactly (points
+   returned as tuples can). What happens to z is upstream's: new points made by
+   `rect_clip` and every point of a Minkowski result get z = 0, `translate_path` drops z,
+   and `default_z` is only read when a z callback is set. `set_z_callback(fn)` uses the callback's
    **return value** as the z, since Python cannot write through a C++ reference. Objects
    must not be passed between `clipper2` and `clipper2.z`.
 8. **Callbacks and the GIL**: the GIL is released while upstream code runs, so two
-   threads clip in parallel. An exception raised in a callback propagates out of
-   `execute`; the binding first runs the clean-up upstream's `Execute` ends with, so the
-   clipper stays usable with its paths still added.
+   threads clip in parallel. An exception raised in a callback is held until upstream's
+   `Execute` returns — the callback is not called again during that run — and then
+   propagates out of `execute`, leaving the object usable. While an object is executing,
+   any call that would change it, from a callback or from another thread, raises
+   `RuntimeError` (C++ has undefined behaviour there). A clipper keeps the
+   `ReuseableDataContainer64` objects added to it alive until `clear()`.
 9. **Not bound**: `clipper.export.h` (a C ABI for DLL users), upstream's C++-only
    plumbing (the type-conversion templates `ScalePath` / `TransformPaths` — use a D
    function's `precision` or numpy's `astype` — the engine-internal structs, and the
@@ -327,8 +336,9 @@ it adds no guard against them either.
   ([#1](https://github.com/Maksim-Burtsev/clipper2-py/issues/1)).
 - **`Triangulate` does not return on some inputs.** In Clipper2 2.0.1 and in current
   upstream main, inputs with duplicate or self-intersecting vertices can make upstream's
-  triangulation loop forever: 29 of 300 small random inputs in one check. An example is in
-  the issue ([#2](https://github.com/Maksim-Burtsev/clipper2-py/issues/2)).
+  triangulation loop forever: 29 of 300 small random inputs in one check. Which inputs
+  depends on the platform: one of the test suite's 600 cases hangs on Linux x86_64 (GCC)
+  and returns on macOS arm64 (clang). An example is in the issue ([#2](https://github.com/Maksim-Burtsev/clipper2-py/issues/2)).
 
 ## Other Python packages
 
@@ -379,8 +389,8 @@ pytest tests
   boolean ops, offsetting, rect clipping, Minkowski, triangulation, simplification and the
   geometry helpers, in both families, demanding exact equality — integers equal, doubles
   bit for bit. Both sides run the same upstream code on the same machine, so anything less
-  is a binding bug. The reference binary is built separately, and the test skips without
-  it:
+  is a binding bug. CI runs it for every wheel on every platform. Locally the reference
+  binary is built separately, and the test skips without it:
 
   ```bash
   cmake -S tests/reference -B build/ref -DCMAKE_BUILD_TYPE=Release

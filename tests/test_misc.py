@@ -206,14 +206,57 @@ def test_triangulate_d_requires_dec_places_as_upstream_does():
 
 
 def test_triangulate_dec_places_belongs_to_the_d_family_only():
-    with pytest.raises(TypeError, match="dec_places"):
-        clipper2.triangulate([SQUARE], 2)
+    with pytest.raises(TypeError, match="takes no 'dec_places'"):
+        clipper2.triangulate([SQUARE], dec_places=2)
 
 
 def test_triangulate_in_the_z_build():
     result, solution = z.triangulate([[(0, 0, 4), (10, 0, 4), (10, 10, 4), (0, 10, 4)]])
     assert result == clipper2.TriangulateResult.SUCCESS  # the enums are shared
     assert all(triangle.shape == (3, 3) for triangle in solution)
+
+
+def test_rect_clip_lines_takes_a_path_or_paths_by_nesting_depth():
+    rect = clipper2.Rect64(0, 0, 10, 10)
+    (single,) = clipper2.rect_clip_lines(rect, CROSSING)
+    (many,) = clipper2.rect_clip_lines(rect, [CROSSING])
+    assert single.tolist() == many.tolist() == [[0, 5], [10, 5]]
+
+
+# --- the z build ---------------------------------------------------------------------------
+
+
+def test_rect_clip_keeps_the_z_of_the_vertices_it_keeps():
+    square = [(0, 0, 3), (10, 0, 4), (10, 10, 5), (0, 10, 6)]
+    (result,) = z.rect_clip(z.Rect64(0, 0, 5, 5), [square])
+    # (0, 0) is a corner of both, so it keeps its z; the three others are new points
+    assert sorted(tuple(point) for point in result.tolist()) == [
+        (0, 0, 3),
+        (0, 5, 0),
+        (5, 0, 0),
+        (5, 5, 0),
+    ]
+    (line,) = z.rect_clip_lines(z.Rect64(0, 0, 10, 10), [[(-5, 5, 8), (15, 5, 9)]])
+    assert line.tolist() == [[0, 5, 0], [10, 5, 0]]  # both ends are new points
+
+
+def test_triangulate_keeps_the_z_of_the_corners():
+    square = [(0, 0, 1), (10, 0, 2), (10, 10, 3), (0, 10, 4)]
+    result, solution = z.triangulate([square])
+    assert result == clipper2.TriangulateResult.SUCCESS
+    assert all(triangle.shape == (3, 3) for triangle in solution)
+    # a square is cut into two triangles along a diagonal: every corner is an input vertex
+    corners = {tuple(point) for triangle in solution for point in triangle.tolist()}
+    assert corners == {(0, 0, 1), (10, 0, 2), (10, 10, 3), (0, 10, 4)}
+
+
+def test_minkowski_carries_z_through():
+    pattern = [(-1, -1, 7), (1, -1, 7), (1, 1, 7), (-1, 1, 7)]
+    square = [(0, 0, 3), (10, 0, 3), (10, 10, 3), (0, 10, 3)]
+    result = z.minkowski_sum(pattern, square, True)
+    assert all(path.shape[1] == 3 for path in result)
+    # upstream sums the two points, and its MinkowskiInternal keeps neither z: they are new
+    assert {point[2] for path in result for point in path.tolist()} == {0}
 
 
 def test_family_dependent_arguments_are_keyword_only():

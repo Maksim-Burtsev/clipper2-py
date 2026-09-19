@@ -6,6 +6,9 @@ with upstream over random input is the differential test's job (tests/reference)
 """
 
 import gc
+import threading
+import time
+import traceback
 
 import numpy as np
 import pytest
@@ -313,6 +316,167 @@ def test_an_exception_in_the_z_callback_propagates():
     )
     with pytest.raises(ValueError, match="boom"):
         off.execute(1.0)
+
+
+def test_the_callback_delta_replaces_the_one_execute_was_given():
+    # upstream's Execute(DeltaCallback64, ...) offsets with a delta of 1.0, which the
+    # callback then overrides: a 10 x 10 square mitred out by 3 is the 16 x 16 square
+    assert vertices(offsetter().execute(lambda *args: 3.0)) == [
+        (-3, -3),
+        (-3, 13),
+        (13, -3),
+        (13, 13),
+    ]
+
+
+def test_a_child_index_outside_an_offset_tree_is_an_index_error():
+    tree = offsetter().execute_tree(1.0)
+    with pytest.raises(IndexError):
+        tree.child(1)
+    with pytest.raises(IndexError):
+        tree[-1]
+    with pytest.raises(IndexError):
+        tree[0].child(0)
+
+
+def test_inflate_paths_precision_cannot_be_passed_by_position():
+    with pytest.raises(TypeError):
+        clipper2.inflate_paths(SQUARE_D, 1, MITER, POLYGON, 2.0, 2)
+
+
+# --- an offsetter that is executing is off limits (no C++ equivalent) --------------------
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda off: off.clear(),
+        lambda off: off.add_path(SQUARE, MITER, POLYGON),
+        lambda off: off.add_paths([SQUARE], MITER, POLYGON),
+        lambda off: off.execute(1.0),
+        lambda off: off.execute_tree(1.0),
+        lambda off: off.set_delta_callback(None),
+        lambda off: setattr(off, "miter_limit", 3.0),
+        lambda off: setattr(off, "arc_tolerance", 1.0),
+        lambda off: setattr(off, "preserve_collinear", True),
+        lambda off: setattr(off, "reverse_solution", True),
+    ],
+)
+def test_the_delta_callback_may_not_touch_the_offsetter(mutate):
+    off = offsetter()
+    off.set_delta_callback(lambda *args: mutate(off) or 1.0)
+    with pytest.raises(RuntimeError, match="ClipperOffset is executing"):
+        off.execute(1.0)
+    # alive and usable afterwards; reads were allowed all along
+    off.set_delta_callback(lambda *args: 1.0 + off.error_code + off.arc_tolerance)
+    assert clipper2.area(off.execute(1.0)) == 144.0
+
+
+def test_another_thread_may_not_mutate_an_offsetter_that_is_executing():
+    inside = threading.Event()
+    outcome = []
+
+    def callback(*args):
+        inside.set()
+        time.sleep(0.2)
+        return 1.0
+
+    off = offsetter()
+
+    def intruder():
+        inside.wait(5)
+        try:
+            off.add_path(SQUARE, MITER, POLYGON)
+            outcome.append(None)
+        except Exception as error:  # noqa: BLE001 - the point of the test
+            outcome.append(error)
+
+    thread = threading.Thread(target=intruder)
+    thread.start()
+    result = off.execute(callback)
+    thread.join(5)
+
+    assert clipper2.area(result) == 144.0
+    assert isinstance(outcome[0], RuntimeError)
+
+
+# --- an exception in a callback is held until upstream has finished (deviation 8) --------
+
+
+def boom(*args):
+    raise ValueError("boom")
+
+
+def test_a_raising_delta_callback_leaves_a_usable_offsetter():
+    off = offsetter()
+    with pytest.raises(ValueError, match="boom") as raised:
+        off.execute(boom)
+    assert "boom" in [frame.name for frame in traceback.extract_tb(raised.value.__traceback__)]
+    # upstream leaves the callback set, but the paths are still there
+    off.set_delta_callback(None)
+    assert clipper2.area(off.execute(1.0)) == 144.0
+
+
+def test_a_raising_delta_callback_in_execute_tree():
+    off = offsetter()
+    off.set_delta_callback(boom)
+    with pytest.raises(ValueError, match="boom"):
+        off.execute_tree(1.0)
+    off.set_delta_callback(None)
+    assert off.execute_tree(1.0).area() == 144.0
+
+
+def test_the_delta_callback_is_not_called_again_after_it_raised():
+    calls = []
+
+    def once(*args):
+        calls.append(args)
+        raise ValueError("boom")
+
+    with pytest.raises(ValueError, match="boom"):
+        offsetter().execute(once)
+    assert len(calls) == 1  # a square asks once per vertex
+
+
+def z_offsetter(callback):
+    off = z.ClipperOffset()
+    off.set_z_callback(callback)
+    off.add_paths(
+        [
+            [(0, 0, 1), (10, 0, 1), (10, 10, 1), (0, 10, 1)],
+            [(5, 5, 2), (15, 5, 2), (15, 15, 2), (5, 15, 2)],
+        ],
+        MITER,
+        POLYGON,
+    )
+    return off
+
+
+def test_a_raising_z_callback_leaves_a_usable_offsetter():
+    off = z_offsetter(boom)
+    with pytest.raises(ValueError, match="boom"):
+        off.execute(1.0)
+    with pytest.raises(ValueError, match="boom"):
+        off.execute_tree(1.0)
+    off.set_z_callback(None)
+    assert z.area(off.execute(1.0)) > 0.0
+
+
+def test_a_z_callback_may_not_touch_the_offsetter_it_runs_in():
+    off = z_offsetter(None)
+    off.set_z_callback(lambda *args: off.clear())
+    with pytest.raises(RuntimeError, match="ClipperOffset is executing"):
+        off.execute(1.0)
+    off.set_z_callback(None)
+    assert z.area(off.execute(1.0)) > 0.0
+
+
+@pytest.mark.parametrize(
+    ("returns", "error"), [(lambda *a: 2**70, OverflowError), (lambda *a: None, TypeError)]
+)
+def test_what_the_offsets_z_callback_returns_must_be_an_int64(returns, error):
+    with pytest.raises(error):
+        z_offsetter(returns).execute(1.0)
 
 
 def test_the_z_callback_exists_only_in_the_z_build():

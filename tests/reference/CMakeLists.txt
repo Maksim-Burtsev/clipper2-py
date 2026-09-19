@@ -1,6 +1,7 @@
 # Standalone build of the differential test's reference CLI. Not part of the root project.
 #   cmake -S tests/reference -B build/ref -DCMAKE_BUILD_TYPE=Release && cmake --build build/ref
-# The binary lands at build/ref/ref_cli (build/ref/Release/ref_cli.exe with MSVC).
+# The binaries land at build/ref/ref_cli and build/ref/ref_cli_z (build/ref/Release/*.exe
+# with MSVC).  ref_cli_z is the same source built with USINGZ: the reference for clipper2.z.
 cmake_minimum_required(VERSION 3.15)
 project(clipper2_ref_cli LANGUAGES CXX)
 
@@ -17,10 +18,15 @@ if(NOT EXISTS "${CLIPPER2_DIR}/src/clipper.engine.cpp")
   message(FATAL_ERROR "third_party/Clipper2 is empty: run git submodule update --init")
 endif()
 
-add_executable(ref_cli
+set(REF_CLI_SOURCES
   ref_cli.cpp
   "${CLIPPER2_DIR}/src/clipper.engine.cpp"
   "${CLIPPER2_DIR}/src/clipper.offset.cpp"
   "${CLIPPER2_DIR}/src/clipper.rectclip.cpp"
   "${CLIPPER2_DIR}/src/clipper.triangulation.cpp")
-target_include_directories(ref_cli PRIVATE "${CLIPPER2_DIR}/include")
+
+foreach(target ref_cli ref_cli_z)
+  add_executable(${target} ${REF_CLI_SOURCES})
+  target_include_directories(${target} PRIVATE "${CLIPPER2_DIR}/include")
+endforeach()
+target_compile_definitions(ref_cli_z PRIVATE USINGZ)

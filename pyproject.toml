@@ -66,9 +66,15 @@ skip = "cp3??t-* *-musllinux_*"
 build-verbosity = 1
 manylinux-x86_64-image = "manylinux_2_28"
 manylinux-aarch64-image = "manylinux_2_28"
-test-requires = ["pytest"]
+test-requires = ["pytest", "mypy"]
+# The differential tests compare every wheel with upstream C++ built by the same toolchain.
+before-test = "cmake -S {project}/tests/reference -B {project}/build/ref -DCMAKE_BUILD_TYPE=Release && cmake --build {project}/build/ref --config Release"
 test-command = "pytest {project}/tests"
-test-skip = "*-macosx_x86_64"
+
+[tool.cibuildwheel.macos]
+# x86_64 wheels are tested under Rosetta on an arm64 runner; the reference CLI must be x86_64
+# as well, or floating-point contraction would differ between the two sides of the comparison.
+before-test = "cmake -S {project}/tests/reference -B {project}/build/ref -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=$(python -c 'import platform; print(platform.machine())') && cmake --build {project}/build/ref"
 
 [tool.cibuildwheel.macos.environment]
 MACOSX_DEPLOYMENT_TARGET = "10.13"

@@ -48,8 +48,9 @@ elevating it would break the release step.
 - [ ] `main` is green: the `wheels` workflow has passed on the commit to be tagged, with
       all five wheel jobs (ubuntu-24.04 x86_64, ubuntu-24.04-arm aarch64, macos-14 arm64,
       macos-14 x86_64, windows-2022 AMD64), the `sdist` job and the `numpy-floor` job.
-      Wheels are built for CPython 3.10–3.14; every job runs `pytest {project}/tests`
-      inside the wheel, except macOS x86_64, which cannot run on an arm64 runner.
+      Wheels are built for CPython 3.10–3.14; every job builds the C++ reference CLIs and
+      runs `pytest {project}/tests`, differential tests included, against the installed wheel
+      (macOS x86_64 under Rosetta).
 - [ ] `version` in `pyproject.toml` is the version to release. The workflow's first step
       compares it with the tag and fails the build if they differ.
 - [ ] `CHANGELOG.md` has the entry for that version, with the release date instead of

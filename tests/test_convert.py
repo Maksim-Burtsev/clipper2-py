@@ -207,3 +207,126 @@ def test_empty_ndarray_keeps_its_dtype():
 def test_nested_empty_sequence_is_one_empty_path():
     assert clipper2.area([[]]) == 0.0
     assert clipper2.ramer_douglas_peucker([[]], 1.0)[0].shape == (0, 2)
+
+
+def test_a_bare_empty_sequence_is_an_empty_path():
+    # deviation 2: an empty sequence cannot be a point, so it is an empty path
+    for result in (
+        clipper2.ramer_douglas_peucker([], 1.0),
+        clipper2.strip_duplicates([], True),
+        clipper2.strip_near_equal([], 1.0, True),
+    ):
+        assert isinstance(result, np.ndarray) and result.shape == (0, 2)
+
+
+def test_an_empty_uint64_array_is_just_an_empty_path():
+    # the uint64 overflow check has no value to look at here
+    assert clipper2.area(np.empty((0, 2), np.uint64)) == 0.0
+    assert clipper2.union([np.empty((0, 2), np.uint64)], NON_ZERO) == []
+
+
+# --- integers numpy cannot hold: still the 64 family (deviation 3) ----------------------
+
+# From INT64_MAX + 1 up numpy.asarray infers float64 (or, past 2**64, object), so without
+# the binding's own look at the Python ints the call would silently run as doubles.
+TOO_BIG = [2**63, 2**63 + 5, 2**64 - 1, 2**64, 2**70, -(2**63) - 1]
+
+
+@pytest.mark.parametrize("value", TOO_BIG)
+@pytest.mark.parametrize("wrap", [list, tuple], ids=["list", "tuple"])
+def test_a_python_int_outside_int64_is_an_overflow_error(value, wrap):
+    path = wrap([wrap((0, 0)), wrap((value, 0)), wrap((1, 1))])
+    with pytest.raises(OverflowError):
+        clipper2.area(path)
+    with pytest.raises(OverflowError):
+        clipper2.union([path], NON_ZERO)
+    with pytest.raises(OverflowError):
+        clipper2.Clipper64().add_subject([path])
+    with pytest.raises(OverflowError):
+        clipper2.ClipperOffset().add_path(path, clipper2.JoinType.MITER, clipper2.EndType.POLYGON)
+    with pytest.raises(OverflowError):
+        clipper2.point_in_polygon(wrap((value, 0)), SQUARE)
+
+
+def test_a_big_int_beside_a_float_keeps_numpys_promotion():
+    # mixing int and float inside one argument is the D family, as numpy.asarray sees it,
+    # and there 2**63 is a perfectly good double
+    result = clipper2.ramer_douglas_peucker([(0.0, 0), (2**63, 0), (1, 1)], 1.0)
+    assert result.dtype == np.float64
+    assert result[1][0] == float(2**63)
+
+
+def test_bool_is_never_a_coordinate():
+    # deviation 3: bool is a TypeError, wherever it hides
+    with pytest.raises(TypeError, match="bool"):
+        clipper2.area([(True, 2), (3, 4), (5, 9)])
+    with pytest.raises(TypeError, match="bool"):
+        clipper2.distance(True, (1, 2))
+    with pytest.raises(TypeError, match="bool"):
+        clipper2.union([[(0, 0), (1, False)]], NON_ZERO)
+    with pytest.raises(TypeError):
+        clipper2.area(np.array([[True, False], [True, True]]))
+
+
+# --- generators and other one-shot iterators (deviation 2) ------------------------------
+
+
+def test_a_generator_of_paths_is_accepted():
+    # family detection and the conversion each walk the argument: a generator would be
+    # empty the second time, so it is materialised once on the way in
+    assert clipper2.area(clipper2.union((path for path in [SQUARE]), NON_ZERO)) == 100.0
+    assert clipper2.area(path for path in [SQUARE]) == 100.0
+
+
+def test_a_one_shot_iterator_at_every_level():
+    assert clipper2.area(map(tuple, SQUARE)) == 100.0  # a path
+    assert clipper2.area([(point for point in SQUARE)]) == 100.0  # paths of generators
+    assert clipper2.area([list(point) for point in SQUARE]) == 100.0
+    assert clipper2.area([(coordinate for coordinate in point) for point in SQUARE]) == 100.0
+    assert clipper2.distance(iter((0, 0)), iter((3, 4))) == 5.0
+
+
+def test_class_methods_take_one_shot_iterators_too():
+    clipper = clipper2.Clipper64()
+    clipper.add_subject(path for path in [SQUARE])
+    clipper.add_clip(iter([[(5, 5), (15, 5), (15, 15), (5, 15)]]))
+    assert clipper2.area(clipper.execute(clipper2.ClipType.INTERSECTION, NON_ZERO)[0]) == 25.0
+
+    offset = clipper2.ClipperOffset()
+    offset.add_paths((path for path in [SQUARE]), clipper2.JoinType.MITER, clipper2.EndType.POLYGON)
+    assert clipper2.area(offset.execute(1.0)) == 144.0
+
+
+def test_strings_and_bytes_stay_rejected():
+    for text in ("abc", b"abc", ["ab", "cd"]):
+        with pytest.raises(TypeError):
+            clipper2.area(text)
+
+
+# --- z on the way in (deviation 7) ------------------------------------------------------
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), -float("inf")])
+def test_a_non_finite_z_is_refused(bad):
+    # z is int64_t upstream; C++ would static_cast this, which is undefined
+    with pytest.raises(ValueError, match="finite"):
+        z.area([(0.0, 0.0, bad), (10.0, 0.0, bad), (10.0, 10.0, bad)])
+    with pytest.raises(ValueError, match="finite"):
+        z.point_in_polygon((0.0, 0.0, bad), [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0)])
+
+
+@pytest.mark.parametrize("bad", [1e300, -1e300, float(2**63), -float(2**64)])
+def test_a_z_outside_int64_is_an_overflow_error(bad):
+    with pytest.raises(OverflowError, match="z"):
+        z.area([(0.0, 0.0, bad), (10.0, 0.0, bad), (10.0, 10.0, bad)])
+
+
+def test_a_fractional_z_truncates_towards_zero():
+    (result,) = z.union([[(0.0, 0.0, -7.9), (10.0, 0.0, -7.9), (10.0, 10.0, -7.9), (0.0, 10.0, -7.9)]], NON_ZERO)
+    assert sorted(result[:, 2].tolist()) == [-7.0] * 4
+    (result,) = z.union([[(0.0, 0.0, 0.9), (10.0, 0.0, 0.9), (10.0, 10.0, 0.9), (0.0, 10.0, 0.9)]], NON_ZERO)
+    assert sorted(result[:, 2].tolist()) == [0.0] * 4
+    # the largest z a float64 column can carry exactly
+    exact = float(2**53)
+    (result,) = z.union([[(0.0, 0.0, exact), (10.0, 0.0, exact), (10.0, 10.0, exact), (0.0, 10.0, exact)]], NON_ZERO)
+    assert sorted(result[:, 2].tolist()) == [exact] * 4

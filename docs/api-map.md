@@ -64,7 +64,7 @@ Conventions used below:
 | `NearEqual` | `near_equal(p1, p2, max_dist_sqrd)` |
 | `StripNearEqual(Path/Paths)` | `strip_near_equal(path, max_dist_sqrd, is_closed_path)` |
 | `StripDuplicates(Path/Paths)` | `strip_duplicates(path, is_closed_path)` — returns the result, C++ edits in place |
-| `CheckPrecisionRange` (2 overloads) | not bound: internal validation, applied by every D function |
+| `CheckPrecisionRange` (2 overloads) | not bound: internal validation. Most D functions call it, but not all: `MinkowskiSum`/`MinkowskiDiff` D never do, and `Triangulate` D clamps `decPlaces` silently. The binding passes the argument on and leaves that to upstream |
 | `TriSign`, `GetSign` | not bound: scalar helpers, `(x > 0) - (x < 0)` |
 | `UInt128Struct`, `MultiplyUInt64`, `ProductsAreEqual` | not bound: 128-bit arithmetic helpers; Python's `int` is exact (`a * b == c * d`) |
 | `CrossProductSign` | `cross_product_sign(pt1, pt2, pt3)` |

@@ -120,6 +120,33 @@ def test_offset_with_delta_callback() -> None:
     assert_no_leak(work)
 
 
+def test_a_raising_callback_leaks_nothing() -> None:
+    """Deviation 8: the exception waits until upstream's Execute has cleaned up.
+
+    `ClipperOffset::Execute(double, PolyTree64&)` is `solution = new Paths64();
+    ExecuteInternal(delta); delete solution;` -- an exception thrown from the delta
+    callback used to unwind straight past that `delete`, losing the whole solution.
+    """
+    big = [
+        [(x * 100, y * 100), (x * 100 + 80, y * 100), (x * 100 + 80, y * 100 + 80)]
+        for x in range(40)
+        for y in range(40)
+    ]
+
+    def boom(path: object, normals: object, curr: int, prev: int) -> float:
+        raise ValueError("boom")
+
+    def work(n: int) -> None:
+        for _ in range(n):
+            offset = cl.ClipperOffset()
+            offset.add_paths(big, cl.JoinType.ROUND, cl.EndType.POLYGON)
+            offset.set_delta_callback(boom)
+            with pytest.raises(ValueError):
+                offset.execute_tree(10.0)
+
+    assert_no_leak(work, calls=50)
+
+
 def test_z_callback() -> None:
     def on_z(e1bot: object, e1top: object, e2bot: object, e2top: object, pt: object) -> int:
         return 42

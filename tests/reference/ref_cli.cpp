@@ -15,8 +15,15 @@
  *   "ERROR <what>"     a Clipper2Exception escaped upstream
  *   "FAILED"           Clipper64/ClipperD::Execute returned false
  *   "EXCEPTION <what>" any other std::exception (a bug here or upstream)
+ *
+ * The same source builds ref_cli_z with -DUSINGZ (see CMakeLists.txt), the reference for
+ * clipper2.z.  There a path carries z as well, `<n> x0 y0 z0 x1 y1 z1 ...` (z is int64_t
+ * in both families, as upstream's z_type), and the three ops that take a z callback -
+ * clipper64, clipperd, offset64 - start with the number of a callback "program" (see
+ * ZProgram below), the clipper ops with ClipperBase::DefaultZ after it.
  */
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -63,7 +70,13 @@ Path<T> ReadPath(std::istream& is)
     T x, y;
     ReadNum(is, x);
     ReadNum(is, y);
+#ifdef USINGZ
+    int64_t z = 0;
+    ReadNum(is, z);
+    path.emplace_back(x, y, z);
+#else
     path.emplace_back(x, y);
+#endif
   }
   return path;
 }
@@ -112,7 +125,14 @@ template <typename T>
 void WPath(std::ostream& os, const Path<T>& path)
 {
   os << ' ' << path.size();
-  for (const auto& pt : path) { WNum(os, pt.x); WNum(os, pt.y); }
+  for (const auto& pt : path)
+  {
+    WNum(os, pt.x);
+    WNum(os, pt.y);
+#ifdef USINGZ
+    WNum(os, static_cast<int64_t>(pt.z));  // z is int64_t in the D family too
+#endif
+  }
 }
 
 template <typename T>
@@ -133,6 +153,39 @@ void WTree(std::ostream& os, const PolyPathT& pp)
 
 // Thrown when Execute() reports failure; the test only checks that Python raises too.
 struct ExecuteFailed {};
+
+#ifdef USINGZ
+
+// ---------------------------------------------------------------- z callbacks
+//
+// Upstream's callback mutates pt.z, the binding's returns the new z, and a differential
+// test needs the two to compute the very same number.  So the callback is not free-form:
+// the record names one of these fixed programs and test_differential_z.py implements the
+// same arithmetic in Python.  They read z only - the D callback is handed x and y de-scaled
+// back to doubles, which is not something two languages reproduce bit for bit by hand,
+// while z is an exact int64 in both families.  The generators keep |z| small enough that
+// none of this overflows int64 (and, for the D family, that the result still fits a
+// float64 column exactly).
+int64_t ZProgram(int prog, int64_t b1, int64_t t1, int64_t b2, int64_t t2, int64_t p)
+{
+  switch (prog)
+  {
+  case 1: return b1 + b2;
+  case 2: return (std::max)((std::max)(b1, t1), (std::max)(b2, t2));
+  case 3: return 31 * b1 + 37 * t1 + 41 * b2 + 43 * t2 + 47 * p;
+  default: return p;  // 0 never reaches here: no callback is installed at all
+  }
+}
+
+template <typename T, typename Callback>
+Callback MakeZCallback(int prog)
+{
+  if (!prog) return nullptr;
+  return [prog](const Point<T>& b1, const Point<T>& t1, const Point<T>& b2, const Point<T>& t2,
+                Point<T>& pt) { pt.z = ZProgram(prog, b1.z, t1.z, b2.z, t2.z, pt.z); };
+}
+
+#endif
 
 // ---------------------------------------------------------------- ops
 
@@ -175,12 +228,21 @@ void Run(const std::string& line, std::ostream& os)
   else if (op == "clipper64")
   {
     int ct, fr;
+#ifdef USINGZ
+    int z_prog;
+    int64_t default_z;
+    is >> z_prog >> default_z;
+#endif
     is >> ct >> fr;
     bool as_tree = ReadBool(is), pc = ReadBool(is), rs = ReadBool(is);
     Paths64 subj = ReadPaths<int64_t>(is);
     Paths64 open_subj = ReadPaths<int64_t>(is);
     Paths64 clip = ReadPaths<int64_t>(is);
     Clipper64 c;
+#ifdef USINGZ
+    c.DefaultZ = default_z;
+    c.SetZCallback(MakeZCallback<int64_t, ZCallback64>(z_prog));
+#endif
     c.PreserveCollinear(pc);
     c.ReverseSolution(rs);
     c.AddSubject(subj);
@@ -206,12 +268,21 @@ void Run(const std::string& line, std::ostream& os)
   else if (op == "clipperd")
   {
     int precision, ct, fr;
+#ifdef USINGZ
+    int z_prog;
+    int64_t default_z;
+    is >> z_prog >> default_z;
+#endif
     is >> precision >> ct >> fr;
     bool as_tree = ReadBool(is), pc = ReadBool(is), rs = ReadBool(is);
     PathsD subj = ReadPaths<double>(is);
     PathsD open_subj = ReadPaths<double>(is);
     PathsD clip = ReadPaths<double>(is);
     ClipperD c(precision);
+#ifdef USINGZ
+    c.DefaultZ = default_z;
+    c.SetZCallback(MakeZCallback<double, ZCallbackD>(z_prog));
+#endif
     c.PreserveCollinear(pc);
     c.ReverseSolution(rs);
     c.AddSubject(subj);
@@ -259,12 +330,19 @@ void Run(const std::string& line, std::ostream& os)
   else if (op == "offset64")
   {
     size_t group_count;
+#ifdef USINGZ
+    int z_prog;
+    is >> z_prog;
+#endif
     double miter_limit = ReadDouble(is), arc_tolerance = ReadDouble(is);
     bool pc = ReadBool(is), rs = ReadBool(is);
     double delta = ReadDouble(is);
     bool as_tree = ReadBool(is);
     is >> group_count;
     ClipperOffset co(miter_limit, arc_tolerance, pc, rs);
+#ifdef USINGZ
+    co.SetZCallback(MakeZCallback<int64_t, ZCallback64>(z_prog));
+#endif
     for (size_t i = 0; i < group_count; ++i)
     {
       int jt, et;
@@ -363,6 +441,22 @@ void Run(const std::string& line, std::ostream& os)
     PathsD paths = ReadPaths<double>(is);
     WPaths(os, RamerDouglasPeucker(paths, epsilon));
   }
+  else if (op == "strip_duplicates64" || op == "strip_duplicatesd")
+  {
+    bool is_closed = ReadBool(is);
+    if (op == "strip_duplicates64")
+    {
+      Path64 path = ReadPath<int64_t>(is);
+      StripDuplicates(path, is_closed);
+      WPath(os, path);
+    }
+    else
+    {
+      PathD path = ReadPath<double>(is);
+      StripDuplicates(path, is_closed);
+      WPath(os, path);
+    }
+  }
   else if (op == "trim_collinear64")
   {
     bool is_open = ReadBool(is);
@@ -435,6 +529,8 @@ int main(int argc, char* argv[])
   std::string line;
   while (std::getline(in, line))
   {
+    // A file written on Windows in text mode ends its lines with "\r\n".
+    if (!line.empty() && line.back() == '\r') line.pop_back();
     if (line.empty() || line[0] == '#') continue;
     std::ostringstream record;
     try

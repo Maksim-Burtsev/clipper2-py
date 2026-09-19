@@ -117,7 +117,8 @@ benchmarks/
    cases over boolean ops (all clip types × fill rules, open paths, polytree), offset (all join ×
    end types), rectclip, rectclip lines, minkowski, triangulation, simplify/RDP/trim_collinear,
    64 and D, and demands exact equality with the binding's output. Built by the standalone
-   `tests/reference/CMakeLists.txt` into `build/ref/ref_cli`; the test skips if the binary is absent.
+   `tests/reference/CMakeLists.txt` into `build/ref/ref_cli` and, with `USINGZ`, `ref_cli_z`
+   (3 200 more cases comparing `clipper2.z`, z included); the test skips if the binary is absent.
 3. Binding-specific tests: dtype dispatch, every validation error, empty inputs, callbacks
    (including ones that raise), PolyTree lifetime (child outlives tree variable), GIL release
    (two threads run concurrently), no leaks over 10⁵ calls (`tracemalloc` / RSS bound),

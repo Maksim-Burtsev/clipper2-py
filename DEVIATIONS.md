@@ -41,6 +41,12 @@ of the argument, so `area`, `get_bounds`, `ramer_douglas_peucker`, `strip_near_e
 points is a path, a sequence of those is paths. An empty sequence cannot be a point, so it is
 an empty path: `[[]]` is paths holding one empty path, and a bare `[]` is an empty path.
 
+A generator, a `map` object or any other one-shot iterator is accepted wherever a point, a
+path or paths are: the binding materialises it once on the way in, at every level (a list
+of generators of points works too). C++ takes a container; here the argument is walked more
+than once — to pick the family and then to convert it — and an iterator would be empty the
+second time. Strings and bytes are still refused.
+
 `rect_clip` and `rect_clip_lines` take the family from the rect as well, because that is what
 picks the overload in C++: a `Rect64` with float paths, or a `RectD` with integer ones, is a
 `TypeError`. `ClipperOffset` and the `RectClip64` / `RectClipLines64` classes are 64-only
@@ -50,9 +56,14 @@ upstream, so float input is a `TypeError` there too.
 
 * A wrong shape is a `ValueError`.
 * An integer that does not fit `int64` is an `OverflowError`; a `uint64` array above
-  `INT64_MAX` too. Nothing is ever truncated silently.
+  `INT64_MAX` too. Nothing is ever truncated silently. Which family runs is decided from
+  the Python objects, not from the array numpy would make of them: `[(0, 0), (2**63, 0)]`
+  is 64-family input whose coordinate overflows, not float64 input. (An `int` and a `float`
+  *mixed* in one argument is still what numpy makes of it: the D family.)
 * Anything that is not an integer or float dtype is a `TypeError` — including `bool`
-  arrays, string arrays and numpy `object` arrays.
+  arrays, string arrays and numpy `object` arrays. A Python `bool` is never a coordinate
+  either, wherever it sits: `distance(True, (1, 2))` and `area([(True, 2), (3, 4), (5, 9)])`
+  are `TypeError`s, although numpy would quietly make them 1 and 0.
 * A float where C++ takes `int64_t` (`translate_path(path, 0.5, 0)` on the 64 family) is a
   `TypeError`; an int where C++ takes `double` is fine.
 * An index outside a `PolyPath`'s children raises `IndexError`; C++ has undefined behaviour
@@ -104,6 +115,12 @@ clipper.core.h), so in the D family the third column is an integer value carried
 upstream's own `MakePathZD` does. An N×2 path is also accepted and gets z = 0, which is
 what upstream's `Point` constructor does.
 
+Because that column is a `float64`, a D-family z on the way **in** is checked where C++
+would only `static_cast`: a `nan` or an infinity is a `ValueError`, a value outside `int64`
+an `OverflowError` (both are undefined behaviour in C++). On the way **out** nothing is
+checked, and a z with |z| > 2⁵³ cannot be represented exactly in the float64 column of a D
+path: the array rounds it. A point returned as a tuple carries the exact integer.
+
 `Rect64` and `RectD` are among the types registered once, in the non-USINGZ extension
 (deviation 6), so in `clipper2.z` they stay two-dimensional: `mid_point()` returns
 `(x, y)`, `as_path()` an N×2 array, and `contains(pt)` wants a plain `(x, y)` — a
@@ -125,16 +142,37 @@ module's instance (`clipper2.Clipper64.clear(z_clipper)`) is not guarded.
 
 The GIL is released while upstream code runs and re-acquired for callbacks, so two threads
 clip in parallel. An exception raised inside a callback — a z callback, or `ClipperOffset`'s
-delta callback — propagates out of `execute()`. It unwinds through upstream's C++ and
-would skip the clean-up `Execute` ends with, so the binding runs that same clean-up
-(`ClipperBase::CleanUp`) before re-raising: the clipper is left as after a normal `execute`,
-with its paths still added. `ClipperOffset` keeps no such state.
+delta callback — propagates out of `execute()`, with its original type, message and
+traceback. It is **not** allowed to unwind through upstream's C++, which would skip the
+clean-up `Execute` ends with (`ClipperOffset::Execute(double, PolyTree64&)` deletes the
+solution it allocated, and leaked it that way). The binding holds the exception instead:
+the first one wins, the callback is not called again for the rest of that `execute`, the
+callback returns a neutral value to upstream (the z callback leaves `pt.z` as upstream set
+it, the delta callback offsets by 0), and once `Execute` has returned and cleaned up after
+itself the exception is re-raised and no result is returned. The object is left as after a
+normal `execute` — usable, with its paths still added — and every object holds its own
+pending exception, so two threads may fail independently.
+
+## 9. A clipper that is executing is off limits
+
+While `Clipper64`, `ClipperD` or `ClipperOffset` is inside `execute` / `execute_tree`, any
+other call on that **same** object that would mutate or execute it — `add_*`, `clear`,
+`execute*`, `set_z_callback`, `set_delta_callback`, `add_reuseable_data`, a property setter,
+`default_z` — raises `RuntimeError("<ClassName> is executing")`, whether it comes from a
+callback or from another thread (the GIL is released, so another thread can get that far).
+C++ has undefined behaviour here: upstream's engine is walking the very structures such a
+call would rebuild. Reading a property is still allowed, and a different object is never
+affected.
+
+`add_reuseable_data` keeps a reference to the container until the clipper's `clear()` or
+its death, because upstream keeps raw `Vertex` pointers into it; in C++ keeping it alive is
+the caller's job.
 
 `ClipperOffset`'s delta callback is upstream's `DeltaCallback64`:
 `fn(path, path_normals, curr_idx, prev_idx)` returns the delta to use, with `path` as an
 int64 array and `path_normals` as a float64 one.
 
-## 9. What is not bound
+## 10. What is not bound
 
 `clipper.export.h` (a C ABI for DLL users) and, per the coverage table in
 `docs/api-map.md`, upstream's C++-only plumbing: the type-conversion templates

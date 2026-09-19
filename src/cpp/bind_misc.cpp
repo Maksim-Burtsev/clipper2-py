@@ -11,7 +11,7 @@ namespace {
 
 // The rect's type picks the C++ overload, so it also picks the family: RectClip(Rect64, PathsD)
 // compiles no better than RectClip(RectD, Paths64) does.
-void check_family(const py::object& geometry, Family family) {
+void check_family(const Geometry& geometry, Family family) {
   const Family found = family_of(geometry);
   if (found != Family::Empty && found != family)
     throw py::type_error(
@@ -23,7 +23,7 @@ void check_family(const py::object& geometry, Family family) {
 // nesting depth of the argument, as in area() / get_bounds(). The two are not quite the same
 // call upstream, so both are kept.
 template <class T, class FPath, class FPaths>
-py::object rect_op(const py::object& geometry, FPath&& on_path, FPaths&& on_paths) {
+py::object rect_op(const Geometry& geometry, FPath&& on_path, FPaths&& on_paths) {
   if (nesting_depth(geometry) >= 3) {
     auto paths = to_paths<T>(geometry);
     return from_paths(without_gil([&] { return on_paths(paths); }));
@@ -39,7 +39,7 @@ void bind_rect_clip_class(py::module_& m, const char* name) {
       .def(py::init<const cl::Rect64&>(), py::arg("rect"))
       .def(
           "execute",
-          [](R& self, const py::object& paths) {
+          [](R& self, const Geometry& paths) {
             auto p = to_paths<int64_t>(paths);
             return from_paths(without_gil([&] { return self.Execute(p); }));
           },
@@ -53,7 +53,7 @@ void bind_misc(py::module_& m) {
 
   m.def(
       "rect_clip",
-      [](const cl::Rect64& rect, const py::object& path, const py::object& precision) {
+      [](const cl::Rect64& rect, const Geometry& path, const py::object& precision) {
         reject_precision(precision, "rect_clip", "precision");
         check_family(path, Family::Int64);
         return rect_op<int64_t>(
@@ -64,7 +64,7 @@ void bind_misc(py::module_& m) {
 
   m.def(
       "rect_clip",
-      [](const cl::RectD& rect, const py::object& path, const py::object& precision) {
+      [](const cl::RectD& rect, const Geometry& path, const py::object& precision) {
         const int prec = precision_arg(precision, 2);
         check_family(path, Family::Double);
         return rect_op<double>(
@@ -75,7 +75,7 @@ void bind_misc(py::module_& m) {
 
   m.def(
       "rect_clip_lines",
-      [](const cl::Rect64& rect, const py::object& line, const py::object& precision) {
+      [](const cl::Rect64& rect, const Geometry& line, const py::object& precision) {
         reject_precision(precision, "rect_clip_lines", "precision");
         check_family(line, Family::Int64);
         return rect_op<int64_t>(
@@ -86,7 +86,7 @@ void bind_misc(py::module_& m) {
 
   m.def(
       "rect_clip_lines",
-      [](const cl::RectD& rect, const py::object& line, const py::object& precision) {
+      [](const cl::RectD& rect, const Geometry& line, const py::object& precision) {
         const int prec = precision_arg(precision, 2);
         check_family(line, Family::Double);
         return rect_op<double>(
@@ -104,7 +104,7 @@ void bind_misc(py::module_& m) {
   auto minkowski_op = [&m](const char* name, bool is_sum) {
     m.def(
         name,
-        [name, is_sum](const py::object& pattern, const py::object& path, bool is_closed,
+        [name, is_sum](const Geometry& pattern, const Geometry& path, bool is_closed,
                        const py::object& decimal_places) {
           return dispatch(
               {pattern, path},
@@ -138,7 +138,7 @@ void bind_misc(py::module_& m) {
   // dec_places sits where upstream's D overload has it, and like upstream it has no default.
   m.def(
       "triangulate",
-      [](const py::object& pp, const py::object& dec_places, bool use_delaunay) {
+      [](const Geometry& pp, const py::object& dec_places, bool use_delaunay) {
         return dispatch(
             {pp},
             [&]() -> py::object {

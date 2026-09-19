@@ -17,7 +17,7 @@ namespace {
 // Calls fn() with the path (nesting depth <= 2) or the paths (depth 3) of the right family.
 // C++ picks those overloads by static type; Python has only the shape of the argument.
 template <class Fn>
-py::object on_path_or_paths(const py::object& x, Fn&& fn) {
+py::object on_path_or_paths(const Geometry& x, Fn&& fn) {
   const bool many = nesting_depth(x) >= 3;
   return dispatch(
       {x},
@@ -26,14 +26,14 @@ py::object on_path_or_paths(const py::object& x, Fn&& fn) {
 }
 
 template <class Fn>
-py::object on_2_points(const py::object& a, const py::object& b, Fn&& fn) {
+py::object on_2_points(const Geometry& a, const Geometry& b, Fn&& fn) {
   return dispatch(
       {a, b}, [&] { return fn(to_point<int64_t>(a), to_point<int64_t>(b)); },
       [&] { return fn(to_point<double>(a), to_point<double>(b)); });
 }
 
 template <class Fn>
-py::object on_3_points(const py::object& a, const py::object& b, const py::object& c, Fn&& fn) {
+py::object on_3_points(const Geometry& a, const Geometry& b, const Geometry& c, Fn&& fn) {
   return dispatch(
       {a, b, c},
       [&] { return fn(to_point<int64_t>(a), to_point<int64_t>(b), to_point<int64_t>(c)); },
@@ -73,7 +73,7 @@ void bind_rect(py::module_& m, const char* name) {
       .def("mid_point", [](const R& r) { return from_point(r.MidPoint()); })
       .def("as_path", [](const R& r) { return from_path(r.AsPath()); })
       .def("contains", [](const R& r, const R& other) { return r.Contains(other); }, py::arg("rec"))
-      .def("contains", [](const R& r, const py::object& pt) { return r.Contains(to_point<T>(pt)); },
+      .def("contains", [](const R& r, const Geometry& pt) { return r.Contains(to_point<T>(pt)); },
            py::arg("pt"))
       .def("scale", &R::Scale, py::arg("scale"))
       .def("intersects", &R::Intersects, py::arg("rec"))
@@ -164,14 +164,14 @@ void bind_core(py::module_& m) {
   // --- clipper.core.h ---------------------------------------------------------------
 
   m.def(
-      "area", [](const py::object& x) {
+      "area", [](const Geometry& x) {
         return on_path_or_paths(x, [](auto&& g) { return run([&] { return cl::Area(g); }); });
       },
       py::arg("path"));
 
   m.def(
       "is_positive",
-      [](const py::object& path) {
+      [](const Geometry& path) {
         return dispatch(
             {path},
             [&] {
@@ -187,14 +187,14 @@ void bind_core(py::module_& m) {
 
   m.def(
       "get_bounds",
-      [](const py::object& x) {
+      [](const Geometry& x) {
         return on_path_or_paths(x, [](auto&& g) { return run([&] { return cl::GetBounds(g); }); });
       },
       py::arg("path"));
 
   m.def(
       "point_in_polygon",
-      [](const py::object& pt, const py::object& polygon) {
+      [](const Geometry& pt, const Geometry& polygon) {
         return dispatch(
             {pt, polygon},
             [&] {
@@ -212,7 +212,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "cross_product",
-      [](const py::object& pt1, const py::object& pt2, const py::object& pt3) {
+      [](const Geometry& pt1, const Geometry& pt2, const Geometry& pt3) {
         return on_3_points(pt1, pt2, pt3, [](auto&& a, auto&& b, auto&& c) {
           return run([&] { return cl::CrossProduct(a, b, c); });
         });
@@ -221,7 +221,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "cross_product",
-      [](const py::object& vec1, const py::object& vec2) {
+      [](const Geometry& vec1, const Geometry& vec2) {
         return on_2_points(vec1, vec2, [](auto&& a, auto&& b) {
           return run([&] { return cl::CrossProduct(a, b); });
         });
@@ -230,7 +230,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "dot_product",
-      [](const py::object& pt1, const py::object& pt2, const py::object& pt3) {
+      [](const Geometry& pt1, const Geometry& pt2, const Geometry& pt3) {
         return on_3_points(pt1, pt2, pt3, [](auto&& a, auto&& b, auto&& c) {
           return run([&] { return cl::DotProduct(a, b, c); });
         });
@@ -239,7 +239,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "dot_product",
-      [](const py::object& vec1, const py::object& vec2) {
+      [](const Geometry& vec1, const Geometry& vec2) {
         return on_2_points(vec1, vec2,
                            [](auto&& a, auto&& b) { return run([&] { return cl::DotProduct(a, b); }); });
       },
@@ -247,7 +247,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "cross_product_sign",
-      [](const py::object& pt1, const py::object& pt2, const py::object& pt3) {
+      [](const Geometry& pt1, const Geometry& pt2, const Geometry& pt3) {
         return on_3_points(pt1, pt2, pt3, [](auto&& a, auto&& b, auto&& c) {
           return run([&] { return cl::CrossProductSign(a, b, c); });
         });
@@ -256,7 +256,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "is_collinear",
-      [](const py::object& pt1, const py::object& shared_pt, const py::object& pt2) {
+      [](const Geometry& pt1, const Geometry& shared_pt, const Geometry& pt2) {
         return on_3_points(pt1, shared_pt, pt2, [](auto&& a, auto&& b, auto&& c) {
           return run([&] { return cl::IsCollinear(a, b, c); });
         });
@@ -265,7 +265,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "distance_sqr",
-      [](const py::object& pt1, const py::object& pt2) {
+      [](const Geometry& pt1, const Geometry& pt2) {
         return on_2_points(pt1, pt2, [](auto&& a, auto&& b) {
           return run([&] { return cl::DistanceSqr(a, b); });
         });
@@ -274,7 +274,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "perpendic_dist_from_line_sqrd",
-      [](const py::object& pt, const py::object& line1, const py::object& line2) {
+      [](const Geometry& pt, const Geometry& line1, const Geometry& line2) {
         return on_3_points(pt, line1, line2, [](auto&& p, auto&& l1, auto&& l2) {
           return run([&] { return cl::PerpendicDistFromLineSqrd(p, l1, l2); });
         });
@@ -283,7 +283,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "mid_point",
-      [](const py::object& p1, const py::object& p2) {
+      [](const Geometry& p1, const Geometry& p2) {
         return on_2_points(p1, p2, [](auto&& a, auto&& b) {
           return from_point(without_gil([&] { return cl::MidPoint(a, b); }));
         });
@@ -292,7 +292,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "near_equal",
-      [](const py::object& p1, const py::object& p2, double max_dist_sqrd) {
+      [](const Geometry& p1, const Geometry& p2, double max_dist_sqrd) {
         return on_2_points(p1, p2, [&](auto&& a, auto&& b) {
           return run([&] { return cl::NearEqual(a, b, max_dist_sqrd); });
         });
@@ -301,7 +301,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "strip_near_equal",
-      [](const py::object& x, double max_dist_sqrd, bool is_closed_path) {
+      [](const Geometry& x, double max_dist_sqrd, bool is_closed_path) {
         return on_path_or_paths(x, [&](auto&& g) -> py::object {
           auto out = without_gil([&] { return cl::StripNearEqual(g, max_dist_sqrd, is_closed_path); });
           return from_geometry(out);
@@ -311,7 +311,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "strip_duplicates",
-      [](const py::object& x, bool is_closed_path) {
+      [](const Geometry& x, bool is_closed_path) {
         return on_path_or_paths(x, [&](auto&& g) -> py::object {
           auto copy = g;
           without_gil([&] {
@@ -325,7 +325,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "translate_point",
-      [](const py::object& pt, double dx, double dy) {
+      [](const Geometry& pt, double dx, double dy) {
         return dispatch(
             {pt},
             [&] {
@@ -341,7 +341,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "reflect_point",
-      [](const py::object& pt, const py::object& pivot) {
+      [](const Geometry& pt, const Geometry& pivot) {
         return on_2_points(pt, pivot, [](auto&& p, auto&& pv) {
           return from_point(without_gil([&] { return cl::ReflectPoint(p, pv); }));
         });
@@ -351,8 +351,8 @@ void bind_core(py::module_& m) {
   // Upstream declares this one for Point64 only.
   m.def(
       "segments_intersect",
-      [](const py::object& seg1a, const py::object& seg1b, const py::object& seg2a,
-         const py::object& seg2b, bool inclusive) {
+      [](const Geometry& seg1a, const Geometry& seg1b, const Geometry& seg2a,
+         const Geometry& seg2b, bool inclusive) {
         auto a = to_point<int64_t>(seg1a);
         auto b = to_point<int64_t>(seg1b);
         auto c = to_point<int64_t>(seg2a);
@@ -364,7 +364,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "get_closest_point_on_segment",
-      [](const py::object& off_pt, const py::object& seg1, const py::object& seg2) {
+      [](const Geometry& off_pt, const Geometry& seg1, const Geometry& seg2) {
         return on_3_points(off_pt, seg1, seg2, [](auto&& p, auto&& s1, auto&& s2) {
           return from_point(without_gil([&] { return cl::GetClosestPointOnSegment(p, s1, s2); }));
         });
@@ -375,8 +375,8 @@ void bind_core(py::module_& m) {
 
   m.def(
       "boolean_op",
-      [](cl::ClipType cliptype, cl::FillRule fillrule, const py::object& subjects,
-         const py::object& clips, const py::object& precision) {
+      [](cl::ClipType cliptype, cl::FillRule fillrule, const Geometry& subjects,
+         const Geometry& clips, const py::object& precision) {
         return dispatch(
             {subjects, clips},
             [&]() -> py::object {
@@ -398,8 +398,8 @@ void bind_core(py::module_& m) {
 
   m.def(
       "boolean_op_tree",
-      [](cl::ClipType cliptype, cl::FillRule fillrule, const py::object& subjects,
-         const py::object& clips, const py::object& precision) {
+      [](cl::ClipType cliptype, cl::FillRule fillrule, const Geometry& subjects,
+         const Geometry& clips, const py::object& precision) {
         return dispatch(
             {subjects, clips},
             [&]() -> py::object {
@@ -431,7 +431,7 @@ void bind_core(py::module_& m) {
   auto two_path_op = [&m](const char* name, cl::ClipType ct) {
     m.def(
         name,
-        [ct, name](const py::object& subjects, const py::object& clips, cl::FillRule fillrule,
+        [ct, name](const Geometry& subjects, const Geometry& clips, cl::FillRule fillrule,
                    const py::object& decimal_prec) {
           return dispatch(
               {subjects, clips},
@@ -455,7 +455,7 @@ void bind_core(py::module_& m) {
   // Union's one-argument form is registered first so that union(subjects, fillrule) matches it.
   m.def(
       "union",
-      [](const py::object& subjects, cl::FillRule fillrule, const py::object& precision) {
+      [](const Geometry& subjects, cl::FillRule fillrule, const py::object& precision) {
         return dispatch(
             {subjects},
             [&]() -> py::object {
@@ -478,7 +478,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "translate_path",
-      [](const py::object& path, const py::object& dx, const py::object& dy) {
+      [](const Geometry& path, const py::object& dx, const py::object& dy) {
         return dispatch(
             {path},
             [&] {
@@ -496,7 +496,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "translate_paths",
-      [](const py::object& paths, const py::object& dx, const py::object& dy) {
+      [](const Geometry& paths, const py::object& dx, const py::object& dy) {
         return dispatch(
             {paths},
             [&] {
@@ -538,7 +538,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "make_path",
-      [](const py::object& values) {
+      [](const Geometry& values) {
         py::array a = coerce<int64_t>(values);
         if (a.ndim() != 1) throw py::value_error("expected a flat sequence of coordinates");
         const int64_t* d = static_cast<const int64_t*>(a.data());
@@ -549,7 +549,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "make_path_d",
-      [](const py::object& values) {
+      [](const Geometry& values) {
         py::array a = coerce<double>(values);
         if (a.ndim() != 1) throw py::value_error("expected a flat sequence of coordinates");
         const double* d = static_cast<const double*>(a.data());
@@ -560,7 +560,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "trim_collinear",
-      [](const py::object& path, const py::object& precision, bool is_open_path) {
+      [](const Geometry& path, const py::object& precision, bool is_open_path) {
         return dispatch(
             {path},
             [&] {
@@ -582,7 +582,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "distance",
-      [](const py::object& pt1, const py::object& pt2) {
+      [](const Geometry& pt1, const Geometry& pt2) {
         return on_2_points(pt1, pt2,
                            [](auto&& a, auto&& b) { return run([&] { return cl::Distance(a, b); }); });
       },
@@ -590,7 +590,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "length",
-      [](const py::object& path, bool is_closed_path) {
+      [](const Geometry& path, bool is_closed_path) {
         return dispatch(
             {path},
             [&] {
@@ -606,7 +606,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "near_collinear",
-      [](const py::object& pt1, const py::object& pt2, const py::object& pt3,
+      [](const Geometry& pt1, const Geometry& pt2, const Geometry& pt3,
          double sin_sqrd_min_angle_rads) {
         return on_3_points(pt1, pt2, pt3, [&](auto&& a, auto&& b, auto&& c) {
           return run([&] { return cl::NearCollinear(a, b, c, sin_sqrd_min_angle_rads); });
@@ -630,7 +630,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "ellipse",
-      [](const py::object& center, double radius_x, double radius_y, size_t steps) {
+      [](const Geometry& center, double radius_x, double radius_y, size_t steps) {
         return dispatch(
             {center},
             [&] {
@@ -648,7 +648,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "simplify_path",
-      [](const py::object& path, double epsilon, bool is_closed_path) {
+      [](const Geometry& path, double epsilon, bool is_closed_path) {
         return dispatch(
             {path},
             [&] {
@@ -666,7 +666,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "simplify_paths",
-      [](const py::object& paths, double epsilon, bool is_closed_path) {
+      [](const Geometry& paths, double epsilon, bool is_closed_path) {
         return dispatch(
             {paths},
             [&] {
@@ -684,7 +684,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "path2_contains_path1",
-      [](const py::object& path1, const py::object& path2) {
+      [](const Geometry& path1, const Geometry& path2) {
         return dispatch(
             {path1, path2},
             [&] {
@@ -702,7 +702,7 @@ void bind_core(py::module_& m) {
 
   m.def(
       "ramer_douglas_peucker",
-      [](const py::object& x, double epsilon) {
+      [](const Geometry& x, double epsilon) {
         return on_path_or_paths(x, [&](auto&& g) -> py::object {
           auto out = without_gil([&] { return cl::RamerDouglasPeucker(g, epsilon); });
           return from_geometry(out);

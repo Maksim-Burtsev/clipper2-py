@@ -14,40 +14,56 @@ namespace {
 // Upstream's Execute returns false without raising; spec decision 7 turns that into an error.
 [[noreturn]] void raise_execute_failed() { throw cl::Clipper2Exception(cl::undefined_error); }
 
-// An exception from a Python callback unwinds through upstream's Execute and skips the
-// CleanUp() it ends with; run it here so the clipper is left as after a normal Execute.
-template <class C, class F>
-bool run_execute(C& self, F&& f) {
-  struct Access : C {
-    using cl::ClipperBase::CleanUp;
-  };
-  try {
-    return without_gil(f);
-  } catch (...) {
-    (self.*(&Access::CleanUp))();
-    throw;
-  }
-}
+// What Python needs on top of upstream's clipper: see ExecState in convert.h.
+template <class C>
+struct Holder : C {
+  using C::C;
+  ExecState state;
+};
+
+using PyClipper64 = Holder<cl::Clipper64>;
+using PyClipperD = Holder<cl::ClipperD>;
 
 template <class C>
-void add_clipper_base(const py::module_& m, py::class_<C>& c) {
-  c.def_property("preserve_collinear",
-                 static_cast<bool (cl::ClipperBase::*)() const>(&cl::ClipperBase::PreserveCollinear),
-                 static_cast<void (cl::ClipperBase::*)(bool)>(&cl::ClipperBase::PreserveCollinear))
-      .def_property("reverse_solution",
-                    static_cast<bool (cl::ClipperBase::*)() const>(&cl::ClipperBase::ReverseSolution),
-                    static_cast<void (cl::ClipperBase::*)(bool)>(&cl::ClipperBase::ReverseSolution))
+void add_clipper_base(const py::module_& m, py::class_<C>& c, const char* name) {
+  c.def_property(
+       "preserve_collinear",
+       static_cast<bool (cl::ClipperBase::*)() const>(&cl::ClipperBase::PreserveCollinear),
+       [name](C& self, bool value) {
+         check_idle(self.state, name);
+         self.PreserveCollinear(value);
+       })
+      .def_property(
+          "reverse_solution",
+          static_cast<bool (cl::ClipperBase::*)() const>(&cl::ClipperBase::ReverseSolution),
+          [name](C& self, bool value) {
+            check_idle(self.state, name);
+            self.ReverseSolution(value);
+          })
       .def_property_readonly("error_code", &cl::ClipperBase::ErrorCode)
-      .def("clear", &cl::ClipperBase::Clear)
+      .def("clear",
+           [name](C& self) {
+             check_idle(self.state, name);
+             self.Clear();
+             self.state.kept.clear();
+           })
       .def(
           "add_reuseable_data",
-          [m](C& self, const py::object& reuseable_data) {
+          [m, name](C& self, const py::object& reuseable_data) {
+            check_idle(self.state, name);
             self.AddReuseableData(cast_local<cl::ReuseableDataContainer64>(
                 m, "ReuseableDataContainer64", reuseable_data));
+            // Upstream keeps raw Vertex pointers into the container until Clear().
+            self.state.kept.push_back(reuseable_data);
           },
           py::arg("reuseable_data"));
 #ifdef USINGZ
-  c.def_readwrite("default_z", &cl::ClipperBase::DefaultZ);
+  c.def_property(
+      "default_z", [](const C& self) { return self.DefaultZ; },
+      [name](C& self, int64_t value) {
+        check_idle(self.state, name);
+        self.DefaultZ = value;
+      });
 #endif
 }
 
@@ -95,7 +111,7 @@ void bind_engine(py::module_& m) {
       .def("clear", &cl::ReuseableDataContainer64::Clear)
       .def(
           "add_paths",
-          [](cl::ReuseableDataContainer64& self, const py::object& paths, cl::PathType polytype,
+          [](cl::ReuseableDataContainer64& self, const Geometry& paths, cl::PathType polytype,
              bool is_open) { self.AddPaths(to_paths<int64_t>(paths), polytype, is_open); },
           py::arg("paths"), py::arg("polytype"), py::arg("is_open"));
 
@@ -104,84 +120,107 @@ void bind_engine(py::module_& m) {
   m.attr("PolyTree64") = m.attr("PolyPath64");  // upstream: using PolyTree64 = PolyPath64
   m.attr("PolyTreeD") = m.attr("PolyPathD");
 
-  py::class_<cl::Clipper64> c64(m, "Clipper64", py::module_local());
-  add_clipper_base(m, c64);
+  py::class_<PyClipper64> c64(m, "Clipper64", py::module_local());
+  add_clipper_base(m, c64, "Clipper64");
   c64.def(py::init<>())
       .def(
           "add_subject",
-          [](cl::Clipper64& self, const py::object& subjects) {
+          [](PyClipper64& self, const Geometry& subjects) {
+            check_idle(self.state, "Clipper64");
             self.AddSubject(to_paths<int64_t>(subjects));
           },
           py::arg("subjects"))
       .def(
           "add_open_subject",
-          [](cl::Clipper64& self, const py::object& open_subjects) {
+          [](PyClipper64& self, const Geometry& open_subjects) {
+            check_idle(self.state, "Clipper64");
             self.AddOpenSubject(to_paths<int64_t>(open_subjects));
           },
           py::arg("open_subjects"))
       .def(
           "add_clip",
-          [](cl::Clipper64& self, const py::object& clips) {
+          [](PyClipper64& self, const Geometry& clips) {
+            check_idle(self.state, "Clipper64");
             self.AddClip(to_paths<int64_t>(clips));
           },
           py::arg("clips"))
       .def(
           "execute",
-          [](cl::Clipper64& self, cl::ClipType clip_type, cl::FillRule fill_rule) {
+          [](PyClipper64& self, cl::ClipType clip_type, cl::FillRule fill_rule) {
+            ExecGuard guard(self.state, "Clipper64");
             cl::Paths64 closed, open;
-            if (!run_execute(self, [&] { return self.Execute(clip_type, fill_rule, closed, open); }))
-              raise_execute_failed();
+            const bool ok =
+                without_gil([&] { return self.Execute(clip_type, fill_rule, closed, open); });
+            guard.rethrow_pending();
+            if (!ok) raise_execute_failed();
             return py::make_tuple(from_paths(closed), from_paths(open));
           },
           py::arg("clip_type"), py::arg("fill_rule"))
       .def(
           "execute_tree",
-          [](cl::Clipper64& self, cl::ClipType clip_type, cl::FillRule fill_rule) {
+          [](PyClipper64& self, cl::ClipType clip_type, cl::FillRule fill_rule) {
+            ExecGuard guard(self.state, "Clipper64");
             std::unique_ptr<cl::PolyTree64> tree(new cl::PolyTree64());
             cl::Paths64 open;
-            if (!run_execute(self, [&] { return self.Execute(clip_type, fill_rule, *tree, open); }))
-              raise_execute_failed();
+            const bool ok =
+                without_gil([&] { return self.Execute(clip_type, fill_rule, *tree, open); });
+            guard.rethrow_pending();
+            if (!ok) raise_execute_failed();
             return py::make_tuple(py::cast(std::move(tree)), from_paths(open));
           },
           py::arg("clip_type"), py::arg("fill_rule"));
 
-  py::class_<cl::ClipperD> cd(m, "ClipperD", py::module_local());
-  add_clipper_base(m, cd);
-  cd.def(py::init<int>(), py::arg("precision") = 2)
+  py::class_<PyClipperD> cd(m, "ClipperD", py::module_local());
+  add_clipper_base(m, cd, "ClipperD");
+  // precision goes through the same rule as every other one: a bool or a float is a
+  // TypeError, as it is for the free functions.
+  cd.def(py::init([](const py::object& precision) {
+           return new PyClipperD(precision_arg(precision, 2));
+         }),
+         py::arg("precision") = 2)
       .def(
           "add_subject",
-          [](cl::ClipperD& self, const py::object& subjects) {
+          [](PyClipperD& self, const Geometry& subjects) {
+            check_idle(self.state, "ClipperD");
             self.AddSubject(to_paths<double>(subjects));
           },
           py::arg("subjects"))
       .def(
           "add_open_subject",
-          [](cl::ClipperD& self, const py::object& open_subjects) {
+          [](PyClipperD& self, const Geometry& open_subjects) {
+            check_idle(self.state, "ClipperD");
             self.AddOpenSubject(to_paths<double>(open_subjects));
           },
           py::arg("open_subjects"))
       .def(
           "add_clip",
-          [](cl::ClipperD& self, const py::object& clips) {
+          [](PyClipperD& self, const Geometry& clips) {
+            check_idle(self.state, "ClipperD");
             self.AddClip(to_paths<double>(clips));
           },
           py::arg("clips"))
       .def(
           "execute",
-          [](cl::ClipperD& self, cl::ClipType clip_type, cl::FillRule fill_rule) {
+          [](PyClipperD& self, cl::ClipType clip_type, cl::FillRule fill_rule) {
+            ExecGuard guard(self.state, "ClipperD");
             cl::PathsD closed, open;
-            if (!run_execute(self, [&] { return self.Execute(clip_type, fill_rule, closed, open); }))
-              raise_execute_failed();
+            const bool ok =
+                without_gil([&] { return self.Execute(clip_type, fill_rule, closed, open); });
+            guard.rethrow_pending();
+            if (!ok) raise_execute_failed();
             return py::make_tuple(from_paths(closed), from_paths(open));
           },
           py::arg("clip_type"), py::arg("fill_rule"))
       .def(
           "execute_tree",
-          [](cl::ClipperD& self, cl::ClipType clip_type, cl::FillRule fill_rule) {
+          [](PyClipperD& self, cl::ClipType clip_type, cl::FillRule fill_rule) {
+            ExecGuard guard(self.state, "ClipperD");
             std::unique_ptr<cl::PolyTreeD> tree(new cl::PolyTreeD());
             cl::PathsD open;
-            if (!run_execute(self, [&] { return self.Execute(clip_type, fill_rule, *tree, open); }))
-              raise_execute_failed();
+            const bool ok =
+                without_gil([&] { return self.Execute(clip_type, fill_rule, *tree, open); });
+            guard.rethrow_pending();
+            if (!ok) raise_execute_failed();
             return py::make_tuple(py::cast(std::move(tree)), from_paths(open));
           },
           py::arg("clip_type"), py::arg("fill_rule"));
@@ -189,16 +228,18 @@ void bind_engine(py::module_& m) {
 #ifdef USINGZ
   c64.def(
       "set_z_callback",
-      [](cl::Clipper64& self, const py::object& callback) {
+      [](PyClipper64& self, const py::object& callback) {
+        check_idle(self.state, "Clipper64");
         set_z_callback<int64_t, cl::ZCallback64>(
-            callback, [&self](cl::ZCallback64 cb) { self.SetZCallback(std::move(cb)); });
+            callback, self.state, [&self](cl::ZCallback64 cb) { self.SetZCallback(std::move(cb)); });
       },
       py::arg("callback"));
   cd.def(
       "set_z_callback",
-      [](cl::ClipperD& self, const py::object& callback) {
+      [](PyClipperD& self, const py::object& callback) {
+        check_idle(self.state, "ClipperD");
         set_z_callback<double, cl::ZCallbackD>(
-            callback, [&self](cl::ZCallbackD cb) { self.SetZCallback(std::move(cb)); });
+            callback, self.state, [&self](cl::ZCallbackD cb) { self.SetZCallback(std::move(cb)); });
       },
       py::arg("callback"));
 #endif
