@@ -189,6 +189,17 @@ print(len(triangles), sum(abs(clipper2.area(t)) for t in triangles))
 # -> 8 6400.0
 ```
 
+Upstream's `Triangulate` expects simple paths. On self-intersecting or self-touching ones it
+may return `FAIL` or `PATHS_INTERSECT`, but it may also never return
+([#2](https://github.com/Maksim-Burtsev/clipper2-py/issues/2)), and the call cannot be
+interrupted. Pass untrusted input through `union` first:
+
+```python
+result, triangles = clipper2.triangulate(
+    clipper2.union(paths, clipper2.FillRule.NON_ZERO)
+)
+```
+
 ### The z module
 
 `clipper2.z` is the same library built with `USINGZ`: points are `(x, y, z)`, paths are
