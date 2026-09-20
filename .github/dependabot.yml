@@ -1,0 +1,29 @@
+version: 2
+updates:
+  # Action pins in .github/workflows/wheels.yml. Grouped so a week's worth of
+  # bumps arrives as one PR instead of five.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # The vendored Clipper2 in third_party/. Monthly: every bump costs a full
+  # cibuildwheel matrix, and the pin needs the checks in RELEASE_CHECKLIST.md
+  # run by hand before it can be merged. Note that Dependabot follows upstream's
+  # default branch, not its release tags, so the PR moves the pin off
+  # Clipper2_2.0.1 -- treat it as a notification that upstream moved and
+  # re-pin to the next tag by hand.
+  - package-ecosystem: "gitsubmodule"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: "build"
