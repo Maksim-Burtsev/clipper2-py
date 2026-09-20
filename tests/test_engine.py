@@ -206,19 +206,25 @@ def test_execute_releases_the_gil():
         clipper.add_clip(clips)
         clipper.execute(clipper2.ClipType.INTERSECTION, NON_ZERO)
 
-    work()  # warm up
-    start = time.perf_counter()
-    work()
-    work()
-    serial = time.perf_counter() - start
+    def serial_once():
+        start = time.perf_counter()
+        work()
+        work()
+        return time.perf_counter() - start
 
-    threads = [threading.Thread(target=work) for _ in range(2)]
-    start = time.perf_counter()
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-    parallel = time.perf_counter() - start
+    def parallel_once():
+        threads = [threading.Thread(target=work) for _ in range(2)]
+        start = time.perf_counter()
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        return time.perf_counter() - start
+
+    work()  # warm up
+    # Best of three: a loaded CI runner once put the ratio at 0.76 with the GIL released.
+    serial = min(serial_once() for _ in range(3))
+    parallel = min(parallel_once() for _ in range(3))
 
     assert parallel < serial * 0.75, f"serial {serial:.3f}s, parallel {parallel:.3f}s"
 

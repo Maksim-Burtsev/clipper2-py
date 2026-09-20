@@ -195,9 +195,12 @@ may return `FAIL` or `PATHS_INTERSECT`, but it may also never return
 interrupted. Pass untrusted input through `union` first:
 
 ```python
+bowtie = [(0, 0), (100, 100), (100, 0), (0, 100)]  # self-intersecting
 result, triangles = clipper2.triangulate(
-    clipper2.union(paths, clipper2.FillRule.NON_ZERO)
+    clipper2.union([bowtie], clipper2.FillRule.NON_ZERO)
 )
+print(result, len(triangles))
+# -> TriangulateResult.SUCCESS 2
 ```
 
 ### The z module
