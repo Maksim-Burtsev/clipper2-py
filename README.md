@@ -27,7 +27,7 @@ pip install clipper2-py
 ```
 
 Wheels for Linux (x86_64, aarch64), macOS (x86_64, arm64) and Windows (AMD64),
-CPython 3.10–3.14. Clipper2 is compiled in; numpy is the only dependency.
+CPython 3.10–3.15. Clipper2 is compiled in; numpy is the only dependency.
 
 ## Offsetting
 

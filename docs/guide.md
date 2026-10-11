@@ -254,7 +254,7 @@ headers with its Python name or the reason it is not bound.
 
 | | Clipper version | API | wheels on PyPI | typed |
 | --- | --- | --- | --- | --- |
-| **clipper2-py** 0.1.0 | Clipper2 2.0.1 | snake_case of upstream, complete; numpy in and out; int64 and double families; a `USINGZ` build | Linux x86_64/aarch64, macOS x86_64/arm64, Windows AMD64; CPython 3.10–3.14 | `py.typed` + stubs |
+| **clipper2-py** 0.1.1 | Clipper2 2.0.1 | snake_case of upstream, complete; numpy in and out; int64 and double families; a `USINGZ` build | Linux x86_64/aarch64, macOS x86_64/arm64, Windows AMD64; CPython 3.10–3.15 | `py.typed` + stubs |
 | [pyclipr](https://pypi.org/project/pyclipr/) 0.1.8 | Clipper2 2.0.1 | camelCase; numpy in and out; float coordinates scaled by a `scaleFactor` | macOS arm64, Windows AMD64; CPython 3.9–3.14 | `.pyi` stubs, no `py.typed` |
 | [pyclipper](https://pypi.org/project/pyclipper/) 1.4.0 | Clipper 6.4.2 (Clipper1) | Cython wrapper keeping Clipper1's names (`Pyclipper`, `AddPaths`, `PT_SUBJECT`); lists of tuples | macOS x86_64/universal2, manylinux x86_64/aarch64, Windows 32/AMD64; CPython 3.10–3.14 including 3.14t, PyPy 3.11 | no |
 | [pyclipper2](https://pypi.org/project/pyclipper2/) 0.0.8 | Clipper2 1.5.4 | nanobind; a subset (boolean ops, `inflate_paths`, `area`, `point_in_polygon`, …) | macOS arm64, CPython 3.13 | no |
