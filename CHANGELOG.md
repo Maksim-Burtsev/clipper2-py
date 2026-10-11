@@ -4,6 +4,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Thi
 has its own [semantic version](https://semver.org/spec/v2.0.0.html), independent of the
 Clipper2 version it bundles; `clipper2.CLIPPER2_VERSION` tells the latter.
 
+## 0.1.1 — 2026-10-11
+
+### Added
+
+- Wheels for CPython 3.15 on every platform (built with cibuildwheel 4.3.1). Free-threaded
+  `cp315t` wheels are not built yet.
+
 ## 0.1.0 — 2026-09-19
 
 First release. Bundles Clipper2 2.0.1 (upstream tag `Clipper2_2.0.1`).
